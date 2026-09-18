@@ -1,0 +1,51 @@
+perception:
+  ros__parameters:
+    opencv_threads: 2
+    source:
+      mode: synthetic
+      device: "0"
+      video_path: ""
+      width: 1280
+      height: 720
+      fps: 60.0
+      loop_video: false
+      frame_id: camera_optical_frame
+      image_topic: /camera/image_raw
+      camera_info_topic: /camera/camera_info
+    preprocess:
+      brightness_threshold: 100
+      opening_radius: 0
+    detector:
+      own_color: red
+      min_light_length: 8.0
+      max_light_width_ratio: 0.45
+      max_tilt_deg: 35.0
+      min_pair_ratio: 1.5
+      max_pair_ratio: 5.0
+      large_pair_ratio: 3.3
+      min_length_ratio: 0.65
+      max_vertical_ratio: 0.6
+      min_color_difference: 8.0
+    classifier:
+      confidence_threshold: 0.7
+    dimensions:
+      # Defaults from local rm_auto_aim; measure the actual light endpoints.
+      small_width_m: 0.135
+      large_width_m: 0.225
+      height_m: 0.055
+    calibration:
+      # False disables PnP on real camera/video until actual calibration is supplied.
+      # Synthetic mode overrides this with explicitly fictional intrinsics.
+      calibrated: false
+      width: 1280
+      height: 720
+      k: [1000.0, 0.0, 640.0, 0.0, 1000.0, 360.0, 0.0, 0.0, 1.0]
+      d: [0.0, 0.0, 0.0, 0.0, 0.0]
+    pnp:
+      max_reprojection_px: 3.0
+    image_tracker:
+      association_px: 80.0
+      timeout_s: 0.3
+    debug:
+      fps: 10.0
+      jpeg_quality: 75

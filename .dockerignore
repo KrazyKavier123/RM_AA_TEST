@@ -1,0 +1,6 @@
+.venv
+build
+install
+log
+output
+**/__pycache__

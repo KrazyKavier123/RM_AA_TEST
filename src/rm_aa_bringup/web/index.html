@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RM AA · 视觉观测台</title><link rel="stylesheet" href="/style.css"></head>
+<body><header><div><span class="eyebrow">RM AA / PERCEPTION LAB</span><h1>视觉观测台</h1></div>
+<span id="connection" class="badge">等待数据</span></header>
+<p class="description">相机图像、装甲板识别、位姿与图像轨迹。角度是相机观测方位，不是云台控制指令。</p>
+<div id="notice" class="notice">等待视觉节点发布数据…</div>
+<section class="metrics" aria-label="性能指标">
+<article><span>采集 FPS</span><strong id="capture">—</strong></article>
+<article><span>处理 FPS</span><strong id="processing">—</strong></article>
+<article><span>算法耗时 / ms</span><strong id="latency">—</strong></article>
+<article><span>帧龄 / ms</span><strong id="age">—</strong></article>
+<article><span>覆盖旧帧数</span><strong id="dropped">—</strong></article>
+<article><span>轨迹重置次数</span><strong id="resets">—</strong></article>
+</section>
+<main><section class="panel image-panel"><div class="panel-title"><h2>检测与轨迹</h2><span id="source">—</span></div>
+<div class="image-wrap"><img id="camera" alt="等待相机标注图"></div>
+<p class="legend">绿色：分类通过　橙色：分类待确认　青色：图像轨迹中心</p></section>
+<section class="panel image-panel"><div class="panel-title"><h2>预处理</h2><span>亮度阈值 · 可选形态学开运算</span></div>
+<div class="image-wrap"><img id="mask" alt="等待二值化图像"></div><p class="legend">Web按独立频率取图；页面刷新率不代表相机帧率。</p></section></main>
+<section class="panel"><div class="panel-title"><h2>装甲板观测</h2><span id="count">0 个候选</span></div>
+<div class="table-wrap"><table><thead><tr><th>候选</th><th>类别 / 大小</th><th>置信度</th><th>分类</th><th>相机 XYZ / m</th><th>观测 yaw / °</th><th>观测 pitch / °</th><th>重投影 / px</th></tr></thead><tbody id="detections"></tbody></table></div>
+<p id="empty">暂无观测。检查颜色、曝光、阈值和相机连接。</p></section>
+<section class="panel"><div class="panel-title"><h2>图像轨迹</h2><span>二维 KF · 单位 px/s</span></div>
+<div class="table-wrap"><table><thead><tr><th>轨迹 ID</th><th>类别</th><th>状态</th><th>中心 / px</th><th>速度 / px/s</th></tr></thead><tbody id="tracks"></tbody></table></div></section>
+<footer>RM_AA · ROS2 / C++17 · 观测与诊断工程</footer><script src="/app.js"></script></body></html>

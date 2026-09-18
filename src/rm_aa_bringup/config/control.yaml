@@ -1,0 +1,49 @@
+﻿camera_control:
+  ros__parameters:
+    fixed_frame: odom
+    gimbal_base_frame: gimbal_base
+    camera_frame: camera_optical_frame
+    # Camera optical centre -> P axis, expressed in optical axes (right/down/forward), metres.
+    # Must agree with the external camera TF; restart after calibration changes.
+    # Pending confirmation of the supplied calibration's units and axes.
+    camera_to_pitch_optical_m: [0.06711, 0.0, 0.0515]
+    camera_offset_tolerance_m: 0.005
+    # P-axis centre -> muzzle, expressed in the pitch frame (forward/left/up), metres.
+    pitch_to_barrel_m: [0.0741, 0.0, 0.0]
+    ballistics:
+      bullet_speed_mps: 22.0
+      bullet_speed_topic: /gimbal/bullet_speed
+      gravity_mps2: 9.7833
+    observations_topic: /observations
+    feedback_topic: /gimbal/joint_states
+    yaw_joint: gimbal_yaw_joint
+    pitch_joint: gimbal_pitch_joint
+    feedback_timeout_s: 0.15
+    observation_max_age_s: 0.2
+    # vision PnP object +Z points into the vehicle for a front-facing plate.
+    plate_normal_sign: 1.0
+    tracker:
+      plate_count: 4
+      radius_m: 0.25
+      min_radius_m: 0.05
+      max_radius_m: 0.8
+      acceleration_variance: 4.0
+      angular_acceleration_variance: 16.0
+      position_variance: 0.0025
+      yaw_variance: 0.04
+      association_distance_m: 0.5
+      association_yaw_rad: 1.0
+      nis_gate: 18.47
+      timeout_s: 0.3
+      switch_margin_m: 0.05
+    mpc:
+      horizon: 25
+      dt_s: 0.02
+      iterations: 300
+      angle_weight: 40.0
+      velocity_weight: 1.0
+      effort_weight: 0.1
+      yaw_max_acceleration: 6.0
+      pitch_max_acceleration: 4.0
+      tolerance: 0.00001
+
