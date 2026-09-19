@@ -24,6 +24,8 @@ target_include_directories(perception_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include> ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(perception_core PUBLIC ${OpenCV_LIBS} Threads::Threads)
+include(cmake/Hikrobot.cmake)
+rm_aa_enable_hikrobot(perception_core)
 target_compile_options(perception_core PRIVATE -Wall -Wextra -Wpedantic)
 
 add_executable(perception_node src/perception_node.cpp)

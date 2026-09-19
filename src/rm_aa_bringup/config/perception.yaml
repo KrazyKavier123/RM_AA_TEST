@@ -4,6 +4,13 @@ perception:
     source:
       mode: synthetic
       device: "0"
+      # camera mode: use Hikrobot MVS SDK. Set uvc for a standard USB webcam.
+      camera_backend: hikrobot
+      # Nonempty serial overrides the SDK enumeration index in device.
+      serial_number: ""
+      exposure_us: 5000.0
+      gain_db: 0.0
+      grab_timeout_ms: 1000
       video_path: ""
       width: 1280
       height: 720

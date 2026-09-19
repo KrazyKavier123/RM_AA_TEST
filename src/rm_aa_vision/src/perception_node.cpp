@@ -45,6 +45,11 @@ public:
     source.height = declare_parameter<int>("source.height", 720);
     source.fps = declare_parameter<double>("source.fps", 60.0);
     source.loop_video = declare_parameter<bool>("source.loop_video", false);
+    source.camera_backend = declare_parameter<std::string>("source.camera_backend", "hikrobot");
+    source.serial_number = declare_parameter<std::string>("source.serial_number", "");
+    source.exposure_us = declare_parameter<double>("source.exposure_us", 5000.0);
+    source.gain_db = declare_parameter<double>("source.gain_db", 0.0);
+    source.grab_timeout_ms = declare_parameter<int>("source.grab_timeout_ms", 1000);
     frame_id_ = declare_parameter<std::string>("source.frame_id", "camera_optical_frame");
     const auto image_topic = declare_parameter<std::string>("source.image_topic", "/camera/image_raw");
     const auto info_topic = declare_parameter<std::string>("source.camera_info_topic", "/camera/camera_info");
@@ -169,6 +174,10 @@ private:
       try {
         if (!source_->read(image)) {
           RCLCPP_WARN(get_logger(), "Capture ended or disconnected; dashboard will become stale"); break;
+        }
+        if (image.empty()) {
+          RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "Camera grab timed out; retrying");
+          continue;
         }
         enqueue(std::move(image), now(), frame_id_);
       } catch (const std::exception & e) { RCLCPP_ERROR(get_logger(), "Capture error: %s", e.what()); break; }

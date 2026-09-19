@@ -13,6 +13,8 @@ add_library(perception_core
   ${CORE_ROOT}/src/image_tracker.cpp ${CORE_ROOT}/src/source.cpp)
 target_include_directories(perception_core PUBLIC ${CORE_ROOT}/include ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(perception_core PUBLIC ${OpenCV_LIBS} Threads::Threads)
+include(${CORE_ROOT}/cmake/Hikrobot.cmake)
+rm_aa_enable_hikrobot(perception_core)
 target_compile_options(perception_core PRIVATE -Wall -Wextra -Wpedantic)
 add_executable(perception_cli ${CORE_ROOT}/src/perception_cli.cpp)
 target_link_libraries(perception_cli perception_core nlohmann_json::nlohmann_json)

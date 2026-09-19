@@ -67,7 +67,7 @@ ros2 launch rm_aa_bringup perception.launch.py
 
 浏览器打开 `http://127.0.0.1:8080`。默认运行C++合成场景，经过实际检测/分类/PnP模块；合成图案不保证与数字模型训练集一致，分类被拒绝时会显示橙框。这不是准确率测试。
 
-USB/UVC相机：
+海康工业相机（先按 [海康接入说明](docs/hikrobot_camera.md) 安装完整MVS SDK并启用构建）：
 
 ```bash
 ros2 launch rm_aa_bringup perception.launch.py source:=camera device:=0
@@ -85,7 +85,7 @@ ros2 launch rm_aa_bringup perception.launch.py source:=video video:=/absolute/pa
 ros2 launch rm_aa_bringup perception.launch.py source:=topic
 ```
 
-在配置中设置实际 `source.image_topic` 和 `source.camera_info_topic`。本工程没有直接集成海康/迈德威视专有SDK；它们通过外部ROS2相机驱动接入。ROS输入需提供有效图像时间戳，时间与节点ROS时钟一致，CameraInfo需与图像同坐标系、分辨率、ROI及畸变模型。
+在配置中设置实际 `source.image_topic` 和 `source.camera_info_topic`。海康可使用上述原生MVS取流，也可通过外部ROS2驱动接入；迈德威视仍需外部驱动。ROS输入需提供有效图像时间戳，时间与节点ROS时钟一致，CameraInfo需与图像同坐标系、分辨率、ROI及畸变模型。普通USB/UVC相机使用camera模式，并在YAML设置 `source.camera_backend: uvc`。
 
 修改配置：编辑 `src/rm_aa_bringup/config/perception.yaml`，或传入 `config:=/absolute/path/custom.yaml`。launch的 `source/device/video` 参数会覆盖YAML中对应项目。配置在启动时读取，运行时设置会明确拒绝，请重启节点生效。
 

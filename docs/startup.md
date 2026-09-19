@@ -31,7 +31,7 @@ ros2 launch rm_aa_bringup bringup.launch.py
 ros2 launch rm_aa_bringup bringup.launch.py mock_gimbal:=true
 ```
 
-真实 UVC 相机（需要真实标定、外部云台反馈及 TF）：
+真实海康相机（先按 [海康接入说明](hikrobot_camera.md) 安装并编译MVS支持；需要真实标定、外部云台反馈及 TF；普通UVC相机另设 `source.camera_backend: uvc`）：
 
 ```bash
 ros2 launch rm_aa_bringup bringup.launch.py source:=camera device:=0
