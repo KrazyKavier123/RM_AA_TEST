@@ -13,10 +13,12 @@ ROOT = Path(__file__).resolve().parents[1]
 def main():
     results = []
     for path in list((ROOT / 'src').rglob('*.py')) + list((ROOT / 'tools').glob('*.py')) + list((ROOT / 'tests').glob('*.py')):
-        ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
+        ast.parse(path.read_text(encoding='utf-8-sig'), filename=str(path))
     results.append('Python AST')
-    for name in ('rm_aa_vision', 'rm_aa_bringup', 'rm_aa_control'):
-        package = ROOT / 'src' / name
+    for directory, name in [('rm_aa_vision', 'rm_aa_vision'), ('rm_aa_bringup', 'rm_aa_bringup'),
+                            ('rm_aa_control', 'rm_aa_control'), ('rm_aa_hardware', 'rm_aa_hardware'),
+                            ('rm_aa_webUI', 'rm_aa_webui')]:
+        package = ROOT / 'src' / directory
         assert ET.parse(package / 'package.xml').getroot().findtext('name') == name
         assert (package / 'CMakeLists.txt').is_file()
     results.append('ROS package XML and CMake entry points')
@@ -27,12 +29,12 @@ def main():
     assert labels == ['1', '2', '3', '4', '5', 'outpost', 'guard', 'base', 'negative']
     results.append('Bundled model SHA256 and label ordering')
     import yaml
-    config = yaml.safe_load((ROOT / 'src/rm_aa_bringup/config/perception.yaml').read_text())['perception']['ros__parameters']
+    config = yaml.safe_load((ROOT / 'src/rm_aa_bringup/config/perception.yaml').read_text(encoding='utf-8-sig'))['perception']['ros__parameters']
     assert len(config['calibration']['k']) == 9
     assert all(isinstance(value, float) for value in config['calibration']['k'])
     assert config['dimensions']['large_width_m'] > config['dimensions']['small_width_m'] > 0
     assert config['source']['mode'] == 'synthetic'
-    control = yaml.safe_load((ROOT / 'src/rm_aa_bringup/config/control.yaml').read_text())['camera_control']['ros__parameters']
+    control = yaml.safe_load((ROOT / 'src/rm_aa_bringup/config/control.yaml').read_text(encoding='utf-8-sig'))['camera_control']['ros__parameters']
     assert control['observations_topic'] == '/observations'
     assert 1 <= control['tracker']['plate_count'] <= 16
     assert control['tracker']['min_radius_m'] <= control['tracker']['radius_m'] <= control['tracker']['max_radius_m']

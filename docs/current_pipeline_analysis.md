@@ -1,5 +1,7 @@
 # RM_AA 当前源码流程框架与参数说明
 
+> 2026-09-20 更新：共享整车 Tracker 扩展为 11 维，第二半径及高度差说明已更新。新增独立串口入口的完整流程与配置见 [training/README.md](../training/README.md)。本页其余部分主要描述原 ROS 链路；本次核心/适配测试 20/20 通过，验证范围见 [验证记录](validation.md)。
+
 > 2026-09-19 修复更新：本文原记录的两处 include 拼接、TF 调用多余反斜杠、弹道候选时间 NaN 问题已修复；枪口偏移参数也已改为显式构造 Eigen 向量。MSVC Release 独立控制核心构建成功，14/14 项测试通过。下文涉及这些问题的描述为修复前记录，不再表示当前状态；ROS2 节点仍未完成构建验证。详见 [验证记录](validation.md)。
 
 分析日期：2026-09-18。分析根目录：`D:\RM_Auto_Aiming\RM_AA`。以当前 `src` 中的源码、launch 和 YAML 为准；不把参考项目的实现、历史测试日志或旧 README 当作当前实现。
@@ -11,8 +13,9 @@
 | 包 | 主要职责 | 产物 / 运行入口 |
 |---|---|---|
 | `rm_aa_vision` | 取图、预处理、灯条与装甲板检测、数字分类、PnP、二维图像跟踪 | `perception_core` 库；`perception_node`、`perception_cli` |
-| `rm_aa_control` | 固定系观测转换、9 维 EKF、选板、未来位置与弹道计算、双轴 MPC | `camera_control_core` 库；`control_node`；`mock_gimbal.py` |
-| `rm_aa_bringup` | 感知启动配置、ROS 到 HTTP 的调试桥、网页 | `perception.launch.py`、`debug_web.py`、Web 静态文件 |
+| `rm_aa_control` | 固定系观测转换、11 维 EKF、选板、未来位置与弹道计算、双轴 MPC | `camera_control_core` 库；`control_node`；`mock_gimbal.py` |
+| `rm_aa_bringup` | 感知与控制启动配置、组合启动入口 | `perception.launch.py`、`tracking.launch.py` |
+| `rm_aa_webui`（目录 `rm_aa_webUI`） | FastAPI 监控、ROS 订阅桥、training 指标客户端、配置编辑 | `backend/server.py`、`static/`、`client/` |
 
 ```mermaid
 flowchart TB
@@ -22,7 +25,7 @@ flowchart TB
   PC["perception.yaml"] --> PL
   CC["control.yaml"] --> CL
   PL --> PN["perception_node.cpp / main"]
-  PL -. "web=true" .-> Web["debug_web.py / main"]
+  PL -. "web=true" .-> Web["rm_aa_webui / server.py main"]
   Camera["UVC / 视频 / 合成图像 / ROS 图像"] --> PN
   PN --> Core["perception_core：检测、分类、PnP、像素 KF"]
   Core --> Obs["/observations：PoseArray"]
@@ -32,7 +35,7 @@ flowchart TB
   Obs --> CN
   TF["外部 TF 与关节反馈"] --> CN
   Mock --> CN
-  CN --> EKF["tracker.cpp：9 维单车 EKF + 选板"]
+  CN --> EKF["tracker.cpp：11 维单车 EKF + 选板"]
   EKF --> Aim["ballistic.hpp：未来板位置的弹道角"]
   Aim --> MPC["mpc.cpp：yaw / pitch 两个 AxisMpc"]
   MPC --> Out["/gimbal/trajectory：JointTrajectory"]
@@ -40,7 +43,7 @@ flowchart TB
   CN --> Diagnostics["/target/state、/target/selected_plate、/control/status"]
 ```
 
-关键区别：视觉 `ImageTracker` 是 4 维像素 KF，控制 `Tracker` 才是 9 维整车 EKF。二者并非前后串接：控制端直接订阅 PnP 位姿，不接收像素 KF 的状态或 ID。
+关键区别：视觉 `ImageTracker` 是 4 维像素 KF，控制 `Tracker` 是 11 维整车 EKF。二者并非前后串接：控制端直接订阅 PnP 位姿，不接收像素 KF 的状态或 ID。
 
 ## 2. 启动、构建和文件关系
 
@@ -51,7 +54,7 @@ flowchart TB
 | `src/rm_aa_vision/src/perception_node.cpp` | `main()` → `PerceptionNode()` → `rclcpp::spin()` | 在线视觉主程序；创建模块、线程、订阅与发布 |
 | `src/rm_aa_vision/src/perception_cli.cpp` | `main()` | 单图/合成图离线检测分类，输出图片和 JSON |
 | `src/rm_aa_control/src/control_node.cpp` | `main()` → `ControlNode()` → `rclcpp::spin()` | 在线控制主程序；观测、反馈、定时规划三个入口 |
-| `src/rm_aa_bringup/scripts/debug_web.py` | `main()` | 启动 ROS 接收线程与 HTTP 服务 |
+| `src/rm_aa_webUI/backend/server.py` | `main()` | 启动 FastAPI 服务与可选 ROS 接收线程 |
 | `src/rm_aa_control/scripts/mock_gimbal.py` | `main()` → `MockGimbal()` → `spin()` | 接口演示用固定 TF、50 Hz 零角度/零速度反馈 |
 | `src/rm_aa_bringup/launch/perception.launch.py` | `generate_launch_description()` | 启动感知和可选 Web |
 | `src/rm_aa_bringup/launch/control.launch.py` | `generate_launch_description()` | 启动控制节点 |
@@ -247,23 +250,24 @@ flowchart LR
 
 时间异常 `reset()` 清空状态与协方差，并增加 `reset_count`；ID 计数不随 reset 重用。未匹配旧轨迹短时保留预测，`observed=false`；超过超时删除。这个轨迹 ID 只用于感知遥测与叠加，不发送给控制端。
 
-### 5.2 控制端：9 维整车 EKF
+### 5.2 控制端：11 维整车 EKF
 
 源码：[tracker.hpp](../src/rm_aa_control/include/rm_aa_control/tracker.hpp)、[tracker.cpp](../src/rm_aa_control/src/tracker.cpp)。
 
 状态严格按代码顺序：
 
-`x=[cx,vx,cy,vy,cz,vz,theta,omega,r]ᵀ`
+`x=[cx,vx,cy,vy,z_even,vz,theta,omega,r_even,r_odd,dz_odd]ᵀ`
 
 | 下标 | 状态 | 物理意义 | 单位 |
 |---|---|---|---|
-| 0、2、4 | cx、cy、cz | 固定坐标系中板环中心位置；cz 是模型所有板共用的高度 | m |
+| 0、2、4 | cx、cy、z_even | 固定坐标系中水平中心位置及偶数索引板高度 | m |
 | 1、3、5 | vx、vy、vz | 中心三轴平移速度 | m/s |
 | 6 | theta | 第 0 块板朝内法向在固定系 XY 平面的相位 | rad |
 | 7 | omega | 上述相位的角速度 | rad/s |
-| 8 | r | 板中心到板环中心的半径，参与估计 | m |
+| 8、9 | r_even、r_odd | 偶数及奇数索引板到车体中心的半径 | m |
+| 10 | dz_odd | 奇数索引板相对偶数索引板的高度差 | m |
 
-它不估计加速度状态、第二半径、相邻板高度差，也不是多车跟踪器。默认假设单车、4 板等角度间隔、同高度、同半径。`theta` 是板面相位，不必等于车体行驶方向。
+2026-09-20 扩展了第二半径和相邻板高度差，仍不估计加速度，也不是多车跟踪器。默认使用单车、4 板等角度间隔。ROS 配置和训练入口启用交替几何；核心 `TrackerConfig` 的 `alternating_geometry=false` 仍可使用同半径、同高度模型。开启交替几何要求板数为偶数。`theta` 是板面相位，不必等于车体行驶方向。
 
 ```mermaid
 flowchart TB
@@ -275,10 +279,10 @@ flowchart TB
   Predict --> Expected["measurement：生成全部模型板位姿"]
   Expected --> Pair["位置/角度门限；归一化误差之和排序"]
   Pair --> Correct["一对一贪心候选 → correct"]
-  Correct --> H["jacobian：4×9解析观测Jacobian"]
+  Correct --> H["jacobian：4×11解析观测Jacobian"]
   H --> NIS["创新S与NIS；异常值拒绝；半径范围检查"]
   NIS --> Joseph["更新x；Joseph形式更新P；更新last_seen"]
-  X0 --> State["9维状态 + 9×9协方差"]
+  X0 --> State["11维状态 + 11×11协方差"]
   Joseph --> State
   State --> PredictPlate["plate_at：state_at未来外推 → measurement"]
   PredictPlate --> Select["select_nearest：距相机最近 + 0.05m切换滞回"]
@@ -293,7 +297,7 @@ flowchart TB
 | `covariance_at(t)` | 计算 `F P Fᵀ+Q`；不修改内部状态 |
 | `predict(t)` | 将上述外推结果写回内部状态与时间 |
 | `measurement(x,i)` | 从车体状态计算第 i 块板的三维位置和法向角 |
-| `jacobian(i)` | 观测函数对 9 维状态的解析导数 |
+| `jacobian(i)` | 观测函数对 11 维状态的解析导数 |
 | `correct(o,i)` | 角度残差归一化、NIS 门控、EKF/Joseph 更新 |
 | `plate_at(i,t)` | `measurement(state_at(t),i)`，用于未来板位置预测 |
 | `select_nearest(t,camera)` | 在全部模型板中选最近板，加距离滞回稳定索引 |
@@ -306,7 +310,10 @@ flowchart TB
 
 ```text
 alpha_i = theta + 2*pi*i/N
-plate_i = [cx-r*cos(alpha_i), cy-r*sin(alpha_i), cz]
+odd = alternating_geometry && (i % 2 != 0)
+r = odd ? r_odd : r_even
+z = z_even + (odd ? dz_odd : 0)
+plate_i = [cx-r*cos(alpha_i), cy-r*sin(alpha_i), z]
 measurement_i = [plate_i.x, plate_i.y, plate_i.z, alpha_i]
 ```
 
@@ -489,35 +496,31 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  Main["debug_web.py / main"] --> State["共享State：锁保护的telemetry与两路JPEG"]
-  Main --> Worker["worker线程"]
-  Worker --> Mode{"--demo ?"}
-  Mode -- "否" --> ROS["run_ros：订阅telemetry和JPEG"]
-  Mode -- "是" --> Demo["run_demo：绘制网页演示夹具"]
-  ROS --> Set["set_telemetry / set_frame"]
-  Demo --> Set
-  Set --> State
-  Main --> Server["ThreadingHTTPServer + handler_for"]
-  State --> Get["snapshot / frame"]
-  Get --> Server
-  Server --> Routes["GET /api/status、/frame.jpg、/mask.jpg"]
-  Routes --> JS["app.js：refresh / refreshImage"]
-  JS --> DOM["row：更新表格；更新图像与状态"]
+  Main["server.py / main"] --> Server["app.py / create_app：FastAPI"]
+  Server --> ROS["可选 run_ros：订阅遥测、图像与控制话题"]
+  ROS --> Hub["Hub：指标历史 / JPEG 缓存"]
+  Training["training monitor::log"] --> Client["client/monitor.cpp：后台 HTTP 批量提交"]
+  Client --> Server
+  Server --> Hub
+  Hub --> WS["/ws：增量指标与心跳"]
+  Hub --> JPEG["/api/frames：JPEG"]
+  WS --> JS["static/app.js：Canvas 曲线与 CSV"]
+  JPEG --> JS
+  JS --> Config["HTTP 配置读取、预览、保存"]
+  Config --> Files["config_files.py：YAML/launch 原文编辑"]
 ```
 
 | 文件 | 入口 / 主要函数 | 功能 |
 |---|---|---|
-| `debug_web.py` | `main()` | 参数解析、资源检查、启动线程与服务、退出清理 |
-| 同文件 | `State.set_telemetry()` / `snapshot()` | JSON 校验、存储、按单调时钟判定2秒在线窗口 |
-| 同文件 | `State.set_frame()` / `frame()` | JPEG字节存取 |
-| 同文件 | `handler_for()` → `Handler.do_GET()` / `send()` | 白名单静态文件、状态 JSON、两路 JPEG；POST 返回405 |
-| 同文件 | `run_ros()` / `run_demo()` | 真实 ROS 桥 / 独立 UI 夹具 |
-| `web/app.js` | 顶层 `refresh()` | 拉取状态、更新 DOM；完成后100ms再次调度 |
-| 同文件 | `refreshImage()`、`row()`；格式化辅助函数 | JPEG fetch、Blob URL更换、表格与数值格式化 |
-| `web/index.html` | 浏览器加载 | 布局、图像容器、指标与数据表，加载CSS/JS |
-| `web/style.css` | 浏览器样式解析 | 页面视觉样式，无算法函数 |
+| `backend/server.py` | `main()` | 参数解析、路径定位、启动 uvicorn |
+| `backend/app.py` | `create_app()`、`Hub.log/image/snapshot()` | HTTP/WS、共享指标历史和 JPEG 缓存、线程生命周期 |
+| `backend/ros_bridge.py` | `run_ros()`、`numeric_fields()` | ROS 订阅与数值提取 |
+| `backend/config_files.py` | `ConfigFiles`、`fields_for()`、`edit_text()` | 配置目录、类型解析、局部修改、校验及保存 |
+| `client/monitor.cpp` | `monitor::start/log/stop` | training 指标异步发送 |
+| `static/app.js` | WebSocket 回调、`render()`、`draw()` | 自动曲线、时间窗口、暂停、CSV、参数表单和源码编辑 |
+| `static/index.html`、`style.css` | 浏览器加载 | 监控和参数页布局、响应式样式 |
 
-当前网页没有订阅 `/control/status`、`/target/state` 或 `/gimbal/trajectory`。页面看到“yaw/pitch”是视觉 PnP 的相机方位角，轨迹速度是 px/s，不能当作控制命令或整车速度。
+新网页订阅 `/target/state`、`/gimbal/trajectory`、反馈及目标指令话题，分别以 `ekf`、`mpc.first_point`、`gimbal`、`command` 区分来源。`vision` 中的 PnP 方位角和像素速度仍是视觉观测。所有曲线保留原始单位。参数页修改源码文件，需要重启相关节点，不提供运行中参数热更新。完整接口、缓存限制及启动命令见 [WebUI说明](../src/rm_aa_webUI/README.md)。
 
 ### 9.2 工具、模型、文档与验证入口
 
@@ -530,7 +533,7 @@ flowchart TB
 | `tools/build.sh` | shell顶层：加载ROS环境 → `colcon build` |
 | `tools/test.sh` | shell顶层：colcon测试、结果、Web单测、静态资源检查 |
 | `tools/install_deps.sh` / `requirements.txt` | 开发依赖安装与Python依赖列表 |
-| `tools/preview_web.ps1` / `.sh` | Web界面夹具预览，不运行C++感知 |
+| `src/rm_aa_webUI/run.ps1` / `run.sh` | 启动统一 Web 服务；`--demo` 仅产生演示指标 |
 | `tools/Dockerfile` | 容器构建与验证环境入口 |
 | `src/rm_aa_vision/test/test_perception.cpp` | GTest：预处理、检测、PnP、模型、像素跟踪 |
 | `src/rm_aa_control/test/test_control.cpp` | GTest：几何指向、EKF、选板、MPC、弹道；当前含include拼接异常 |
@@ -674,4 +677,4 @@ flowchart TB
 
 因此当前项目可准确概括为：**已有完整的视觉感知组织、独立像素跟踪和单车EKF/MPC源码框架，控制端正在接入弹道与外参；当前源码的控制编译/弹道路径尚有阻塞，硬件发送仍在项目外。**
 
-若按源码阅读顺序理解全工程，建议：`tracking.launch.py` → 两份YAML → `perception_node.cpp` → 六个视觉算法文件 → `types.hpp`和ROS话题边界 → `control_node.cpp` → `tracker.cpp` → `ballistic.hpp` → `mpc.cpp` → `debug_web.py/app.js`。
+若按源码阅读顺序理解全工程，建议：`tracking.launch.py` → 两份YAML → `perception_node.cpp` → 六个视觉算法文件 → `types.hpp`和ROS话题边界 → `control_node.cpp` → `tracker.cpp` → `ballistic.hpp` → `mpc.cpp` → `rm_aa_webUI/backend` 与 `static/app.js`。

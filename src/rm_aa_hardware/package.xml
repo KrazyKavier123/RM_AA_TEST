@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>rm_aa_hardware</name><version>0.1.0</version>
+  <description>ROS2 C++ bridge for RMVtraining 64-byte gimbal feedback and commands.</description>
+  <maintainer email="maintainer@example.com">RM_AA Maintainer</maintainer>
+  <license>MIT</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <build_depend>rosidl_default_generators</build_depend>
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  <depend>rclcpp</depend><depend>rcl_interfaces</depend><depend>std_msgs</depend>
+  <depend>sensor_msgs</depend><depend>geometry_msgs</depend><depend>trajectory_msgs</depend>
+  <depend>tf2_ros</depend>
+  <exec_depend>launch_ros</exec_depend><exec_depend>ament_index_python</exec_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>rclpy</test_depend><test_depend>tf2_msgs</test_depend>
+  <member_of_group>rosidl_interface_packages</member_of_group>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

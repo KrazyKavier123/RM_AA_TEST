@@ -11,7 +11,7 @@
 #ifdef RM_AA_WITH_HIKROBOT
 #include <MvCameraControl.h>
 #endif
-namespace rm_aa {5
+namespace rm_aa {
 #ifdef RM_AA_WITH_HIKROBOT
 namespace {
 void sdk_check(int result, const char * operation) {

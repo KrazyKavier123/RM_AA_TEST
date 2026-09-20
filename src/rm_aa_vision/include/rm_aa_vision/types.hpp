@@ -34,7 +34,7 @@ struct Calibration {
   int width{1280}, height{720};
   bool calibrated{false};
 };
-struct Dimensions { double small_width_m{0.135}, large_width_m{0.225}, height_m{0.055}; };
+struct Dimensions { double small_width_m{0.135}, large_width_m{0.230}, height_m{0.057}; };
 inline const char * size_name(PlateSize s) { return s == PlateSize::Small ? "small" : "large"; }
 inline const char * color_name(Color c) { return c == Color::Red ? "red" : "blue"; }
 }

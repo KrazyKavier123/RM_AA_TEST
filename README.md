@@ -1,23 +1,27 @@
-**RM_AA：ROS2 / C++17 视觉观测与调试工作空间。**
+**RM_AA：C++17 装甲板视觉、跟踪与 RMVtraining 协议适配工程。**
 
-当前实现取流、图像预处理、全部候选装甲闭合框、数字识别、大小板区分、PnP、二维图像轨迹、ROS消息及Web观测。代码按模块拆分，可以独立测试。
+2026-09-20 已按 RMVtraining 要求实现 Linux 独立入口：64字节串口收发、读线程/操作线程、海康取流、检测分类、PnP与实测外参、11维旋转车体EKF、预测指令和数值Web曲线。构建、协议、坐标和配置说明见 [training/README.md](training/README.md)。
 
-**当前交付不构成请求中的完整自瞄系统：没有实现自主击打目标选择、弹道拦截、击打时刻装甲预测、执行机构控制或串口瞄准指令。跟踪模块是图像坐标中的线性KF，不是整车EKF。页面中的yaw/pitch是相机观测方位角，不是云台目标值。**
+原ROS入口保留，视觉像素KF与整车EKF是独立模块。ROS图像网页显示相机观测方位；训练入口数值网页显示PnP、EKF和实际协议输出。两套入口分别启动，不要同时占用同一相机或Web端口。
 
-本工作空间定位为不连接执行机构的视觉观测工程。请按下表评估实际交付范围，不能以网页能够显示图像判断完整自瞄已完成。
+ROS 电控桥接见 [rm_aa_hardware](src/rm_aa_hardware/README.md)：接收同一 64 字节协议并发布姿态/关节反馈及动态 TF，发送完整目标指令或按时间采样的 MPC 轨迹。通过 `hardware:=true` 启用；默认完整目标消息模式，接入现有 MPC 时需要在硬件 YAML 中选择 trajectory 并配置已知目标 ID。
+
+相机内外参、串口设备、MCU姿态轴向和编号映射需按实物配置。模板标定无效时程序拒绝运行；开火配置默认关闭。编译/单元测试与实机验收范围见 [验证记录](docs/validation.md)。
 
 **目录布局**
 
-整个项目的统一启动入口是 `ros2 launch rm_aa_bringup bringup.launch.py`，启动视觉、控制和可选 Web；无硬件接口演示加 `mock_gimbal:=true`。构建步骤、输入要求和全部参数见 [统一启动说明](docs/startup.md)。该入口复用现有模块，当前控制源码问题仍需解决后才能完成全链路运行。
+ROS入口是 `ros2 launch rm_aa_bringup bringup.launch.py`，构建使用 `colcon build --base-paths src`；参数见 [ROS启动说明](docs/startup.md)。任务书的独立串口入口则使用根目录CMake构建生成的 `rm_aa_training`，详见上面的training说明。
 
 ```text
 RM_AA/
+├── CMakeLists.txt                  独立训练入口构建
+├── training/                       双线程主程序、算法适配、原串口协议与Web曲线
 ├── src/
 │   ├── rm_aa_vision/
 │   │   ├── include/rm_aa_vision/     C++模块接口、观测数据结构
 │   │   ├── src/                     模块实现、ROS节点、离线CLI
-│   │   ├── models/                  已有MLP权重、标签
-│   │   └── test/                    原生C++测试
+│   │   └── models/                  已有MLP权重、标签
+│   ├── rm_aa_control/               整车EKF、MPC、弹道与ROS控制节点
 │   └── rm_aa_bringup/
 │       ├── config/                  YAML参数
 │       ├── launch/                  ROS2启动文件
@@ -34,7 +38,7 @@ RM_AA/
 
 | 环节 | 技术实现 | 源码 |
 |---|---|---|
-| 相机/视频取流 | OpenCV VideoCapture；Linux UVC走V4L2；支持视频、合成帧、外部ROS图像话题 | `source.cpp`、`perception_node.cpp` |
+| 相机/视频取流 | 海康MVS SDK；可选OpenCV VideoCapture/UVC；支持视频、合成帧、外部ROS图像话题 | `source.cpp`、`perception_node.cpp` |
 | 帧缓存 | 独立采集/处理线程，单槽缓存覆盖旧帧，避免处理积压 | `perception_node.cpp` |
 | 图像预处理 | BGR转灰度、亮度二值化、可选形态学开运算（腐蚀再膨胀），默认关闭开运算 | `preprocessor.cpp` |
 | 灯条提取 | findContours、minAreaRect、长度/宽度/倾角过滤、轮廓内B/R均值判断颜色 | `detector.cpp` |
@@ -47,7 +51,7 @@ RM_AA/
 | 轨迹恢复 | 超时/时间倒退/数值异常处理；新轨迹重新初始化状态与协方差 | `image_tracker.cpp` |
 | 框与中间量 | 闭合四边形、外接矩形、类别/大小、图像轨迹编号 | `perception_node.cpp` |
 | ROS传输 | PoseArray、CompressedImage及String封装的JSON遥测 | `perception_node.cpp` |
-| Web | rclpy订阅 + Python标准库HTTP服务；原生HTML/CSS/JS轮询；不用CDN | `debug_web.py`、`web/` |
+| Web | FastAPI + WebSocket/HTTP；原生HTML/CSS/JS；ROS/training监控与配置文件编辑 | `src/rm_aa_webUI/` |
 
 装甲检测使用传统OpenCV几何方法；神经网络只负责数字分类。模型来自本地rm_auto_aim，名称为`mlp.onnx`，不使用YOLO、TensorRT或OpenVINO。完整来源见 [THIRD_PARTY.md](THIRD_PARTY.md)。
 
@@ -118,7 +122,7 @@ ros2 launch rm_aa_bringup perception.launch.py source:=camera config:="$PWD/outp
 
 遥测中的 `pose_array_index` 将候选与PoseArray索引关联；PnP无效的候选`pose`为null。默认所有话题采用best-effort、深度1。Web按独立默认10Hz频率获取JPEG，实际处理循环可更快。`processing_ms`不含JPEG编码和Web耗时，另有`debug_ms`与`frame_age_ms`。
 
-Web默认只监听本机；需要从同一局域网查看时启动 `host:=0.0.0.0`，再访问机器人IP的8080端口。页面只读，所有数据来自观测节点。HTTP入口为 `/api/status`、`/frame.jpg`、`/mask.jpg`。超过2秒未收到遥测会标记数据过期。
+Web默认只监听本机；需要从同一局域网查看时启动 `host:=0.0.0.0`，再访问机器人IP的8080端口。统一页面提供指标曲线、ROS图像及源码配置编辑；指标走 `/ws`，图像走 `/api/frames/image` 和 `/api/frames/mask`，服务状态为 `/api/status`。过期来源和指标在页面标记，详细说明见 [WebUI](src/rm_aa_webUI/README.md)。
 
 **测试和单模块运行**
 
@@ -158,10 +162,11 @@ cd D:\RM_Auto_Aiming\RM_AA
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r tools/requirements.txt
 .\.venv\Scripts\python.exe tools/check_workspace.py
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
-powershell -File tools/preview_web.ps1
+.\.venv\Scripts\python.exe -m pip install -r src/rm_aa_webUI/requirements-test.txt
+.\.venv\Scripts\python.exe -m pytest src/rm_aa_webUI/tests/test_server.py -q
+powershell -File src/rm_aa_webUI/run.ps1 --demo
 ```
 
-`--demo` / `preview_web`只是Web界面夹具，不运行C++链路，页面会明确标注，帧率/PnP等真实指标留空。它与ROS启动后的C++合成场景不同。
+`--demo` 只生成明确标注的 `demo.` 曲线，不运行 C++ 链路。正常监控请去掉该参数；ROS 总入口的 `web:=true` 会启动新服务，training 则向独立启动的服务发送指标。参数页保存源码 YAML/launch，重启相关节点后生效，不能视为运行中热更新。详见 [WebUI 启动与接口](src/rm_aa_webUI/README.md)。
 
 详细数据流、限制和验证记录分别见 [架构说明](docs/architecture.md)、[验证记录](docs/validation.md)。

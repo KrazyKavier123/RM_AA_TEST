@@ -83,8 +83,8 @@ public:
       declare_parameter<double>("classifier.confidence_threshold", 0.7));
     Dimensions dimensions;
     dimensions.small_width_m = declare_parameter<double>("dimensions.small_width_m", 0.135);
-    dimensions.large_width_m = declare_parameter<double>("dimensions.large_width_m", 0.225);
-    dimensions.height_m = declare_parameter<double>("dimensions.height_m", 0.055);
+    dimensions.large_width_m = declare_parameter<double>("dimensions.large_width_m", 0.230);
+    dimensions.height_m = declare_parameter<double>("dimensions.height_m", 0.057);
     solver_ = std::make_unique<PoseSolver>(dimensions, declare_parameter<double>("pnp.max_reprojection_px", 3.0));
     camera_.calibrated = declare_parameter<bool>("calibration.calibrated", false);
     camera_.width = declare_parameter<int>("calibration.width", 1280);

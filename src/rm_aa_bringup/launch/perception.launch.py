@@ -24,8 +24,7 @@ def generate_launch_description():
                  'source.device': ParameterValue(LaunchConfiguration('device'), value_type=str),
                  'source.video_path': ParameterValue(LaunchConfiguration('video'), value_type=str),
              }]),
-        Node(package='rm_aa_bringup', executable='debug_web.py', name='debug_web',
+        Node(package='rm_aa_webui', executable='server.py',
              output='screen', condition=IfCondition(LaunchConfiguration('web')),
-             arguments=['--host', LaunchConfiguration('host'), '--port', LaunchConfiguration('port'),
-                        '--web-root', str(share / 'web')]),
+             arguments=['--ros', '--host', LaunchConfiguration('host'), '--port', LaunchConfiguration('port')]),
     ])

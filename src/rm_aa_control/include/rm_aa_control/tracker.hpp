@@ -17,12 +17,14 @@ struct TrackerConfig {
   double position_variance{0.0025}, yaw_variance{0.04};
   double association_distance{0.5}, association_yaw{1.0}, nis_gate{18.47};
   double timeout{0.3}, switch_margin{0.05};
+  bool alternating_geometry{false};
+  double max_height_difference{0.3};
 };
 class Tracker {
 public:
-  // [cx, vx, cy, vy, cz, vz, heading, heading_rate, radius]
-  using State = Eigen::Matrix<double, 9, 1>;
-  using Covariance = Eigen::Matrix<double, 9, 9>;
+  // [cx, vx, cy, vy, z_even, vz, heading, heading_rate, r_even, r_odd, dz_odd]
+  using State = Eigen::Matrix<double, 11, 1>;
+  using Covariance = Eigen::Matrix<double, 11, 11>;
   explicit Tracker(TrackerConfig config = {});
   bool update(const std::vector<Observation> & observations, double stamp,
               const Eigen::Vector3d & camera_position);
@@ -37,7 +39,7 @@ public:
   double last_seen() const { return last_seen_; }
 private:
   Observation measurement(const State & state, int index) const;
-  Eigen::Matrix<double, 4, 9> jacobian(int index) const;
+  Eigen::Matrix<double, 4, 11> jacobian(int index) const;
   void predict(double stamp);
   bool correct(const Observation & observation, int index);
   TrackerConfig config_;

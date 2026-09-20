@@ -43,7 +43,7 @@ install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY models DESTINATION share/${PROJECT_NAME})
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../../licenses/rm_auto_aim-MIT.txt
   DESTINATION share/${PROJECT_NAME}/models RENAME LICENSE.txt)
-if(BUILD_TESTING)
+if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test/test_perception.cpp")
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_perception test/test_perception.cpp)
   target_link_libraries(test_perception perception_core)

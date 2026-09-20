@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
 project(rm_aa_bringup)
 find_package(ament_cmake REQUIRED)
-install(DIRECTORY config launch web DESTINATION share/${PROJECT_NAME})
-install(PROGRAMS scripts/debug_web.py DESTINATION lib/${PROJECT_NAME})
+install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME})
 ament_package()

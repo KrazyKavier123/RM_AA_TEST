@@ -18,11 +18,14 @@
     feedback_topic: /gimbal/joint_states
     yaw_joint: gimbal_yaw_joint
     pitch_joint: gimbal_pitch_joint
+    roll_joint: gimbal_roll_joint
     feedback_timeout_s: 0.15
     observation_max_age_s: 0.2
     # vision PnP object +Z points into the vehicle for a front-facing plate.
     plate_normal_sign: 1.0
     tracker:
+      alternating_geometry: true
+      max_height_difference_m: 0.3
       plate_count: 4
       radius_m: 0.25
       min_radius_m: 0.05

@@ -91,6 +91,30 @@ TEST(Tracker, WrapsHeadingInnovation) {
   ASSERT_TRUE(tracker.update({{{3.25, 0, 0}, -pi + 0.001}}, 1.02, Eigen::Vector3d::Zero()));
   EXPECT_LT(std::abs(wrap(tracker.state_at(1.02)[6] - pi)), 0.01);
 }
+TEST(Tracker, EstimatesAlternatingRadiusAndHeightAcrossPlateSwitches) {
+  TrackerConfig config;
+  config.alternating_geometry = true;
+  Tracker tracker(config);
+  for (int k = 0; k < 800; ++k) {
+    const double t = k * 0.02;
+    std::vector<Observation> observations;
+    for (int i : {k / 30 % 4, (k / 30 + 1) % 4}) {
+      const double angle = wrap(0.3 + 0.7 * t + i * pi / 2);
+      const double radius = i % 2 ? 0.32 : 0.25;
+      observations.push_back({{3 + 0.2 * t - radius * std::cos(angle),
+        0.4 - 0.1 * t - radius * std::sin(angle), 0.2 + (i % 2 ? 0.08 : 0)}, angle});
+    }
+    ASSERT_TRUE(tracker.update(observations, t, Eigen::Vector3d::Zero()));
+  }
+  const auto x = tracker.state_at(15.98);
+  EXPECT_NEAR(x[8], 0.25, 0.025);
+  EXPECT_NEAR(x[9], 0.32, 0.025);
+  EXPECT_NEAR(x[10], 0.08, 0.015);
+  EXPECT_NEAR(x[1], 0.2, 0.05);
+  EXPECT_NEAR(x[7], 0.7, 0.06);
+  Eigen::SelfAdjointEigenSolver<Tracker::Covariance> eigen(tracker.covariance());
+  EXPECT_GT(eigen.eigenvalues().minCoeff(), -1e-10);
+}
 TEST(Mpc, RespectsAccelerationAndDoubleIntegratorDynamics) {
   MpcConfig config;
   AxisMpc mpc(config);

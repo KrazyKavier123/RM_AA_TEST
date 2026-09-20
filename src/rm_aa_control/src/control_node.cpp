@@ -46,6 +46,7 @@ public:
     gravity_ = positive("ballistics.gravity_mps2", 9.7833);
     yaw_joint_ = declare_parameter<std::string>("yaw_joint", "gimbal_yaw_joint");
     pitch_joint_ = declare_parameter<std::string>("pitch_joint", "gimbal_pitch_joint");
+    roll_joint_ = declare_parameter<std::string>("roll_joint", "gimbal_roll_joint");
     timeout_ = positive("feedback_timeout_s", 0.15);
     age_limit_ = positive("observation_max_age_s", 0.2);
     normal_sign_ = declare_parameter<double>("plate_normal_sign", 1.0);
@@ -54,6 +55,8 @@ public:
         yaw_joint_.empty() || pitch_joint_.empty() || yaw_joint_ == pitch_joint_)
       throw std::invalid_argument("Frames/joint names must be nonempty and joint names distinct");
     TrackerConfig t;
+    t.alternating_geometry = declare_parameter<bool>("tracker.alternating_geometry", true);
+    t.max_height_difference = positive("tracker.max_height_difference_m", 0.3);
     t.plate_count = declare_parameter<int>("tracker.plate_count", t.plate_count);
     t.radius = positive("tracker.radius_m", t.radius);
     t.min_radius = positive("tracker.min_radius_m", t.min_radius);
@@ -153,7 +156,15 @@ private:
       axes[i] = {msg.position[index], msg.velocity[index]};
       if (!axes[i].allFinite()) return;
     }
-    yaw_ = axes[0]; pitch_ = axes[1]; feedback_stamp_ = stamp.seconds();
+    double roll = 0.0;  // Older two-joint feedback (including mock) has no roll axis.
+    const auto roll_it = std::find(msg.name.begin(), msg.name.end(), roll_joint_);
+    if (roll_it != msg.name.end()) {
+      const auto index = static_cast<size_t>(roll_it - msg.name.begin());
+      if (index >= msg.position.size() || !std::isfinite(msg.position[index])) return;
+      roll = msg.position[index];
+    }
+    yaw_ = axes[0]; pitch_ = axes[1]; roll_ = roll; feedback_stamp_ = stamp.seconds();
+    feedback_stamp_ns_ = stamp.nanoseconds();
   }
   void publish_status(const std::string & value) {
     std_msgs::msg::String msg; msg.data = value; status_->publish(msg);
@@ -172,7 +183,7 @@ private:
     }
     try {
       // Use feedback time: dynamic TF often cannot extrapolate to the timer's current time.
-      const rclcpp::Time frame_time(static_cast<int64_t>(feedback_stamp_ * 1e9), get_clock()->get_clock_type());
+      const rclcpp::Time frame_time(feedback_stamp_ns_, get_clock()->get_clock_type());
       const auto base_from_world = transform(base_frame_, fixed_frame_, frame_time);
       
       const auto world_from_camera = transform(fixed_frame_, camera_frame_, frame_time);
@@ -180,7 +191,8 @@ private:
         (base_from_world * world_from_camera).translation();
       const Eigen::Matrix3d feedback_rotation =
         (Eigen::AngleAxisd(yaw_[0], Eigen::Vector3d::UnitZ()) *
-         Eigen::AngleAxisd(-pitch_[0], Eigen::Vector3d::UnitY())).toRotationMatrix();
+         Eigen::AngleAxisd(-pitch_[0], Eigen::Vector3d::UnitY()) *
+         Eigen::AngleAxisd(roll_, Eigen::Vector3d::UnitX())).toRotationMatrix();
       const double camera_offset_error =
         (camera_in_base - feedback_rotation * pitch_to_camera_).norm();
       if (camera_offset_error > camera_offset_tolerance_) {
@@ -270,7 +282,9 @@ private:
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "%s", e.what());
     }
   }
-  std::string fixed_frame_, base_frame_, camera_frame_, yaw_joint_, pitch_joint_;
+  std::string fixed_frame_, base_frame_, camera_frame_, yaw_joint_, pitch_joint_, roll_joint_;
+  double roll_{0.0};
+  int64_t feedback_stamp_ns_{0};
   double timeout_{}, age_limit_{}, normal_sign_{}, feedback_stamp_{-1}, last_tick_{-1};
   double camera_offset_tolerance_{}, bullet_speed_{22.0}, gravity_{9.7833};
   Eigen::Vector2d yaw_{Eigen::Vector2d::Zero()}, pitch_{Eigen::Vector2d::Zero()};

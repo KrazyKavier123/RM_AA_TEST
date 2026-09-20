@@ -36,10 +36,10 @@ perception:
     classifier:
       confidence_threshold: 0.7
     dimensions:
-      # Defaults from local rm_auto_aim; measure the actual light endpoints.
+      # RMVtraining specification: small 135x57 mm; large 230x57 mm.
       small_width_m: 0.135
-      large_width_m: 0.225
-      height_m: 0.055
+      large_width_m: 0.230
+      height_m: 0.057
     calibration:
       # False disables PnP on real camera/video until actual calibration is supplied.
       # Synthetic mode overrides this with explicitly fictional intrinsics.

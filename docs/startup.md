@@ -7,7 +7,7 @@ bringup.launch.py
 └── tracking.launch.py
     ├── perception.launch.py
     │   ├── perception_node
-    │   └── debug_web.py（web=true）
+    │   └── rm_aa_webui/server.py（web=true，FastAPI + WebSocket/HTTP）
     ├── control.launch.py
     │   └── control_node
     └── mock_gimbal.py（mock_gimbal=true）
@@ -22,6 +22,8 @@ bash tools/build.sh
 source install/setup.bash
 ros2 launch rm_aa_bringup bringup.launch.py
 ```
+
+新 Web 服务需先安装 `src/rm_aa_webUI/requirements.txt` 中的 Python 依赖，具体 Python/ROS 环境与单独启动方式见 [WebUI说明](../src/rm_aa_webUI/README.md)。网页可编辑源码配置；保存后需重启相关节点，复制安装的配置还需重新构建。
 
 默认使用合成图像，开启控制和 Web；mock 默认关闭。没有外部 TF/关节反馈时控制节点会等待有效输入。浏览器地址为 `http://127.0.0.1:8080`。
 

@@ -9,4 +9,4 @@ set +u
 source "/opt/ros/${ros_distro}/setup.bash"
 set -u
 cd "$workspace_dir"
-colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON "$@"
+colcon build --base-paths src --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON "$@"

@@ -1,0 +1,30 @@
+rm_aa_hardware:
+  ros__parameters:
+    serial:
+      device: /dev/ttyACM0
+      baud_rate: 115200
+      tx_rate_hz: 100.0
+      reconnect_s: 1.0
+    feedback_timeout_s: 0.15
+    command_timeout_s: 0.15
+    # target_command: atomic complete protocol fields; trajectory: existing ROS MPC output.
+    command_source: target_command
+    # Trajectory messages contain no robot ID. Set to the KNOWN target ID for single-target tests.
+    # 0 disables trajectory commands; this is not an automatic classifier ID mapping.
+    trajectory_target_id: 0
+    enable_fire: false
+    joint_names: [gimbal_yaw_joint, gimbal_pitch_joint, gimbal_roll_joint]
+    base_frame: gimbal_base
+    attitude_frame: gimbal_attitude
+    camera_frame: camera_optical_frame
+    fixed_frame: odom
+    publish_attitude_tf: true
+    # Enable only when no other node broadcasts these TF edges.
+    # Identity odom -> gimbal_base assumes a stationary chassis at the origin.
+    publish_fixed_base_tf: false
+    publish_camera_tf: false
+    camera_extrinsics_calibrated: false
+    # Camera optical origin/orientation expressed in the moving attitude frame.
+    # Fill with measured extrinsics before enabling camera TF.
+    camera_translation_m: [0.0, 0.0, 0.0]
+    camera_quaternion_xyzw: [-0.5, 0.5, -0.5, 0.5]

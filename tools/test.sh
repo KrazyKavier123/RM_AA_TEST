@@ -8,5 +8,5 @@ source install/setup.bash
 set -u
 colcon test --event-handlers console_direct+ --return-code-on-test-failure
 colcon test-result --verbose
-python3 -m unittest discover -s tests -v
+python3 -m pytest src/rm_aa_webUI/tests/test_server.py -q
 python3 tools/check_workspace.py

@@ -1,6 +1,6 @@
 FROM ros:humble-ros-base
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential cmake python3-colcon-common-extensions python3-yaml python3-opencv \
+    build-essential cmake python3-colcon-common-extensions python3-yaml python3-opencv python3-pip \
     libopencv-dev nlohmann-json3-dev ros-humble-cv-bridge ros-humble-ament-cmake-gtest \
     libeigen3-dev ros-humble-eigen3-cmake-module ros-humble-tf2-ros \
     ros-humble-nav-msgs ros-humble-trajectory-msgs \
@@ -8,12 +8,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /ws
 COPY src /ws/src
 COPY licenses /ws/licenses
-COPY tests /ws/tests
+COPY training /ws/training
 COPY tools /ws/tools
+RUN python3 -m pip install -r src/rm_aa_webUI/requirements.txt pytest httpx
 RUN . /opt/ros/humble/setup.sh && \
-    colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && \
+    colcon build --base-paths src --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON && \
     . /ws/install/setup.sh && \
     colcon test --return-code-on-test-failure --event-handlers console_direct+ && \
     colcon test-result --verbose && \
-    python3 -m unittest discover -s tests -v && python3 tools/check_workspace.py
+    python3 -m pytest src/rm_aa_webUI/tests/test_server.py -q && python3 tools/check_workspace.py
 CMD ["bash", "-c", "source /ws/install/setup.bash && python3 tools/smoke_ros.py"]

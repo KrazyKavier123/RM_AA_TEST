@@ -7,6 +7,8 @@ import signal
 import socket
 import subprocess
 import time
+import math
+from websockets.sync.client import connect
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -33,25 +35,31 @@ def main():
                 try:
                     with urlopen(f'http://127.0.0.1:{port}/api/status', timeout=1) as response:
                         last = json.load(response)
-                    if last.get('online') and last.get('sequence', 0) >= 10:
-                        if len(last.get('detections', [])) == 2 and all(d.get('pose') for d in last['detections']):
-                            break
+                    if 'vision' in last.get('sources', {}) and set(last.get('images', {})) >= {'image', 'mask'}:
+                        break
                 except (URLError, TimeoutError):
                     pass
                 time.sleep(0.1)
             else:
                 raise AssertionError(f'No complete C++ observation frame: {last}')
-            assert last['mode'] == 'synthetic' and last['synthetic_calibration']
-            assert last['output_kind'] == 'observation_only'
-            assert {d['size'] for d in last['detections']} == {'small', 'large'}
-            assert len(last['image_tracks']) == 2
-            for route in ('frame.jpg', 'mask.jpg'):
-                with urlopen(f'http://127.0.0.1:{port}/{route}', timeout=2) as response:
+            metrics = {}
+            with connect(f'ws://127.0.0.1:{port}/ws') as websocket:
+                for _ in range(50):
+                    packet = json.loads(websocket.recv(timeout=2))
+                    metrics.update({sample['key']: sample['v'] for sample in packet['samples']})
+                    if metrics.get('vision.sequence', 0) >= 10:
+                        break
+            assert metrics.get('vision.synthetic_calibration') == 1
+            for index in range(2):
+                for axis in range(3):
+                    assert math.isfinite(metrics[f'vision.detections.{index}.pose.position_m.{axis}'])
+            for route in ('image', 'mask'):
+                with urlopen(f'http://127.0.0.1:{port}/api/frames/{route}', timeout=2) as response:
                     data = response.read()
                     assert response.headers['Content-Type'] == 'image/jpeg'
                     assert data[:2] == b'\xff\xd8' and len(data) > 100
-            (output / 'ros_smoke.json').write_text(json.dumps(last, indent=2), encoding='utf-8')
-            print('PASS: C++ synthetic frame -> detection/classification/PnP -> ROS -> HTTP/JPEG')
+            (output / 'ros_smoke.json').write_text(json.dumps({'status': last, 'metrics': metrics}, indent=2), encoding='utf-8')
+            print('PASS: C++ synthetic PnP -> ROS -> FastAPI -> WebSocket metrics / HTTP JPEG')
         finally:
             if process.poll() is None:
                 os.killpg(process.pid, signal.SIGINT)

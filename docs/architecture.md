@@ -1,8 +1,30 @@
+# 项目入口与架构
+
+ROS 硬件接口现由 [rm_aa_hardware](../src/rm_aa_hardware/README.md) 提供：64 字节电控反馈 → 关节状态/姿态 TF；目标消息或 MPC 轨迹 → 64 字节发送。总 launch 通过 `hardware:=true` 启用。原 MPC 轨迹缺少目标 ID 和稳定状态，轨迹模式需要配置已知 ID，且始终禁止开火；完整协议字段使用 `TargetCommand` 输入。
+
+2026-09-20 起增加与 RMVtraining 要求对应的独立 CMake 入口。双线程、64 字节串口、Web 曲线和各任务函数的完整说明见 [training/README.md](../training/README.md)。原 ROS 入口继续保留；下文的感知架构专指 ROS 版本。
+
+```mermaid
+flowchart TB
+  A[training/main.cpp] --> B[ReadFunction：接收 MCU 状态]
+  A --> C[OperationFunction：逐帧处理]
+  B --> D[加锁复制控制器快照]
+  D --> C
+  C --> E[StudentTasks.cpp：取流、检测、分类、PnP]
+  E --> F[tracker.cpp：11 维整车 EKF]
+  F --> G[预测选板、延迟补偿、弹道计算]
+  G --> H[AppSupport.cpp：单位转换、结果校验]
+  H --> I[SerialPort.Write：原格式 64 字节]
+  C --> J[monitor::log：HTTP 发送指标到统一 WebUI]
+```
+
+独立入口复用 `rm_aa_vision` 和 `rm_aa_control` 核心，使用 `training/config/camera.yaml`；ROS 入口仍使用各 launch 和 ROS YAML。两套配置格式不同，不能直接互换。共享 Tracker 现为 11 维，支持相邻板半径及高度差；细节见 [current_pipeline_analysis.md](current_pipeline_analysis.md#52-控制端11-维整车-ekf)。
+
 **算法与系统职责分开，C++核心可以脱离ROS节点进行单元测试。**
 
 ```mermaid
 flowchart LR
-  A[UVC / 视频 / 合成场景] --> B[最新帧缓存]
+  A[海康 SDK / UVC / 视频 / 合成场景] --> B[最新帧缓存]
   C[外部ROS2相机] --> B
   B --> D[灰度与二值化]
   D --> E[灯条轮廓与几何配对]
@@ -11,14 +33,15 @@ flowchart LR
   F --> H[二维图像轨迹KF]
   G --> I[ROS观测与遥测]
   H --> I
-  I --> J[只读HTTP Web]
+  I --> J[FastAPI → WebSocket监控 / HTTP图像]
+  J --> K[参数页 → 源码YAML与launch保存]
 ```
 
-`perception_core`包含Preprocessor、Detector、Classifier、PoseSolver、ImageTracker和Source。它们的接口只使用C++标准类型/OpenCV类型。ROS节点负责参数、线程、时间戳、发布和JPEG调试图；Python桥负责订阅与HTTP。
+`perception_core`包含Preprocessor、Detector、Classifier、PoseSolver、ImageTracker和Source。它们的接口只使用C++标准类型/OpenCV类型。ROS节点负责参数、线程、时间戳、发布和JPEG调试图；`src/rm_aa_webUI` 集中提供 FastAPI、可选 ROS 订阅桥、training HTTP 指标客户端和原生网页。参数页保存源码文件，需要重启相关节点，详见 [WebUI说明](../src/rm_aa_webUI/README.md)。
 
 **坐标、时间与数据契约**
 
-图像格式统一为BGR8；亮度灰度转换是BGR2GRAY。角点顺序为左上、右上、右下、左下；物点在平面z=0，x向右、y向下。PnP观测坐标采用相机光学系：x右、y下、z前。三维位置为米，JSON角度为弧度，页面转换为度。
+图像格式统一为BGR8；亮度灰度转换是BGR2GRAY。角点顺序为左上、右上、右下、左下；物点在平面z=0，x向右、y向下。PnP观测坐标采用相机光学系：x右、y下、z前。三维位置为米，JSON角度为弧度，当前通用指标曲线保留原始单位。
 
 观测yaw是水平相机方位、pitch向上为正。它们不包含相机到云台外参、惯性系变换、重力或延迟补偿，不属于执行机构目标值。相机移动时图像速度混合了相机运动和物体运动，不可解释成整车世界速度。
 

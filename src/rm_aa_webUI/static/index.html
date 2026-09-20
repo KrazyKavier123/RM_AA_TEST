@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RM_AA · 监控与调参</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="mark">RM</span><div><strong>RM_AA</strong><small>监控与调参</small></div></div>
+    <nav aria-label="主导航"><button class="tab active" data-page="monitor">实时监控</button><button class="tab" data-page="config">参数配置</button></nav>
+    <span id="connection" class="status">正在连接</span>
+  </header>
+  <main>
+    <section id="monitorPage">
+      <div class="heading"><div><span class="eyebrow">TELEMETRY</span><h1>运行监控</h1><p>实时数值与历史曲线</p></div><div id="sources" class="sources"></div></div>
+      <div class="toolbar">
+        <label>数据源 <select id="sourceFilter"><option value="">全部来源</option></select></label>
+        <label>时间窗 <select id="timeWindow"><option value="15">15 秒</option><option value="30" selected>30 秒</option><option value="60">1 分钟</option><option value="300">5 分钟</option><option value="0">全部缓存</option></select></label>
+        <span id="metricCount" class="muted">0 个指标</span>
+        <div class="toolbar-actions"><button id="pause">暂停显示</button><button id="clear">清空曲线</button><button id="export">导出全部 CSV</button></div>
+      </div>
+      <div id="monitorNote" class="note">等待数据。启动 training 或 ROS 感知程序后，指标会自动出现。</div>
+      <div id="charts" class="charts"></div>
+      <div id="empty" class="empty"><span class="empty-symbol">⌁</span><h2>尚无运行数据</h2><p>连接后自动创建指标曲线，无需手动添加。</p></div>
+      <details class="image-panel"><summary>图像预览 <span class="muted">ROS 调试图像 / 二值图</span></summary><div class="images"><figure><img id="cameraImage" alt="等待相机调试图像"><figcaption>检测结果</figcaption></figure><figure><img id="maskImage" alt="等待二值图"><figcaption>预处理结果</figcaption></figure></div></details>
+    </section>
+    <section id="configPage" hidden>
+      <div class="heading"><div><span class="eyebrow">CONFIGURATION</span><h1>参数配置</h1><p>编辑源码配置，保存到原文件</p></div><span id="dirty" class="muted">未选择文件</span></div>
+      <div class="toolbar config-toolbar"><label class="file-label">配置文件 <select id="configFile" aria-label="配置文件"><option value="">选择 YAML / launch 文件</option></select></label><button id="reloadFile">重新加载</button><button id="save" class="primary" disabled>保存到文件</button></div>
+      <div class="note">保存后需重启对应节点或程序。launch 的显式参数可覆盖 YAML；修改源码后使用 symlink-install，或重新构建以更新安装目录。</div>
+      <div id="fileInfo" class="file-info">请选择文件。</div>
+      <div class="editor-shell">
+        <div class="editor-toolbar"><div class="segmented"><button id="formTab" class="selected">参数表单</button><button id="sourceTab">源文件</button></div><input id="paramSearch" type="search" placeholder="筛选参数名称…" aria-label="筛选参数"></div>
+        <div id="fields" class="fields"><p class="muted placeholder">选择配置文件后，在这里调整数值。</p></div>
+        <textarea id="sourceEditor" spellcheck="false" wrap="off" aria-label="配置源文件" hidden></textarea>
+      </div>
+    </section>
+    <div id="notice" role="status" hidden></div>
+  </main>
+  <footer><span>RM_AA / LOCAL MONITOR</span><span id="rosState">HTTP · WebSocket</span></footer>
+</body>
+</html>

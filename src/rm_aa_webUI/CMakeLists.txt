@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.16)
+project(rm_aa_webui)
+find_package(ament_cmake REQUIRED)
+install(PROGRAMS backend/server.py DESTINATION lib/${PROJECT_NAME})
+install(FILES backend/app.py backend/config_files.py backend/ros_bridge.py DESTINATION lib/${PROJECT_NAME})
+install(DIRECTORY static launch DESTINATION share/${PROJECT_NAME})
+install(FILES README.md requirements.txt DESTINATION share/${PROJECT_NAME})
+ament_package()
