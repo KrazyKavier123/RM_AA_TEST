@@ -8,11 +8,12 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 int main(int argc, char ** argv) {
-  if (argc < 4 || argc > 5) {
-    std::cerr << "Usage: perception_cli MODEL.onnx LABELS.txt OUTPUT.png [INPUT_IMAGE]\n"; return 2;
+  if (argc != 5) {
+    std::cerr << "Usage: perception_cli MODEL.onnx LABELS.txt OUTPUT.png INPUT_IMAGE\n"; return 2;
   }
   try {
-    cv::Mat image = argc == 5 ? cv::imread(argv[4]) : rm_aa::synthetic_frame(1280, 720, 0);
+    cv::Mat image = cv::imread(argv[4]);
+    if (image.empty()) throw std::runtime_error("Cannot read input image");
     rm_aa::Preprocessor preprocess;
     rm_aa::Detector detector;
     rm_aa::Classifier classifier(argv[1], argv[2], 0.7);

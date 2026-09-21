@@ -2,7 +2,7 @@ perception:
   ros__parameters:
     opencv_threads: 2
     source:
-      mode: synthetic
+      mode: video
       device: "0"
       # camera mode: use Hikrobot MVS SDK. Set uvc for a standard USB webcam.
       camera_backend: hikrobot
@@ -11,6 +11,8 @@ perception:
       exposure_us: 5000.0
       gain_db: 0.0
       grab_timeout_ms: 1000
+      # Directory (sorted by filename, non-recursive) or a single video file.
+      # Relative paths resolve against the process working directory.
       video_path: ""
       width: 1280
       height: 720
@@ -42,7 +44,7 @@ perception:
       height_m: 0.057
     calibration:
       # False disables PnP on real camera/video until actual calibration is supplied.
-      # Synthetic mode overrides this with explicitly fictional intrinsics.
+      # Supply the recording camera's actual calibration for video PnP.
       calibrated: false
       width: 1280
       height: 720

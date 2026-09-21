@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Fixed camera / zero feedback source for interface demo; does not follow commands."""
 import rclpy
 from rclpy.node import Node
@@ -56,4 +56,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

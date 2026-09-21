@@ -1,6 +1,6 @@
 # 监控与参数配置
 
-统一使用原生 HTML/CSS/JS + FastAPI + WebSocket/HTTP。ROS 和 training 共用这套页面；training 不再启动自己的 Web 服务。
+统一使用原生 HTML/CSS/JS + FastAPI + WebSocket/HTTP，通过 ROS 话题展示视觉、控制和硬件状态。
 
 ## 启动
 
@@ -11,7 +11,7 @@
 .\src\rm_aa_webUI\run.ps1
 ```
 
-浏览器打开 `http://127.0.0.1:8080`。Windows 不需要 ROS 即可编辑配置、接收 training 指标。仅预览页面时运行 `run.ps1 --demo`，演示指标使用 `demo.` 前缀。
+浏览器打开 `http://127.0.0.1:8080`。仅预览页面时运行 `run.ps1 --demo`，演示指标使用 `demo.` 前缀。
 
 Linux 可以直接运行：
 
@@ -39,20 +39,18 @@ ros2 launch rm_aa_webui webui.launch.py
 - 指标到达后自动创建曲线：当前值、更新时间、来源筛选、时间窗口、暂停/继续、折叠、清空浏览器历史、单条或全部 CSV 导出。
 - 浏览器每指标保留最近 5000 个样本；服务端所有指标共保留最近 10000 个样本。WebSocket 断线后自动重连，补发服务端仍保留的数据；不是长期日志数据库。
 - ROS 模式显示检测叠加图和二值图，接收视觉遥测、云台反馈、目标指令、关节状态、跟踪状态和轨迹首点。曲线保留消息原单位，不自动将 rad 转为度。
-- 参数页列出 `src/**/config` 和 `training/config` 中已有的 YAML（含 `.yaml.example`），以及 `src/**/launch/*.launch.py`。支持字段搜索、类型对应输入框、源码编辑、重新加载和保存。
+- 参数页列出 `src/**/config` 中已有的 YAML（含 `.yaml.example`），以及 `src/**/launch/*.launch.py`。支持字段搜索、类型对应输入框、源码编辑、重新加载和保存。
 - YAML 表单支持嵌套标量及列表元素，保留未修改内容和注释；支持教学配置的 `%YAML:1.0` / OpenCV 矩阵。launch 表单提取字面量启动默认值及字典常量；表达式通过源码视图修改。解析 launch 使用 AST，不执行脚本。
 - 保存前检查语法和文件版本，避免覆盖其他编辑器刚写入的内容。
 
-**保存意味着修改磁盘文件，不会向运行中的节点动态设置参数。** 当前算法大多启动时读取配置，需要重启相关节点或 training。修改的是源码配置；使用复制安装时需重新构建，`--symlink-install` 则应确认实际安装文件为链接。命令行 launch 参数和 launch 内显式覆盖仍优先于 YAML。修改 `.yaml.example` 只改变模板；运行时应编辑实际传入的 `camera.yaml`。
+**保存意味着修改磁盘文件，不会向运行中的节点动态设置参数。** 当前算法大多启动时读取配置，需要重启相关节点。修改的是源码配置；使用复制安装时需重新构建，`--symlink-install` 则应确认实际安装文件为链接。命令行 launch 参数和 launch 内显式覆盖仍优先于 YAML。
 
 ## 文件与数据流
 
 ```mermaid
 flowchart LR
-  T[training: monitor::log] --> C[client/monitor.cpp 后台批量发送]
-  C -->|POST /api/telemetry| A[backend/app.py FastAPI + Hub]
   R[ROS2 话题] --> B[backend/ros_bridge.py]
-  B --> A
+  B --> A[backend/app.py FastAPI + Hub]
   A -->|WebSocket /ws 指标| UI[static/index.html + app.js + style.css]
   A -->|HTTP /api/frames 图像| UI
   UI -->|HTTP 配置读取/预览/保存| F[backend/config_files.py]
@@ -66,20 +64,10 @@ flowchart LR
 | `backend/ros_bridge.py` | `run_ros()`：可选 ROS 订阅线程；`numeric_fields()`：提取数值字段 |
 | `backend/config_files.py` | `ConfigFiles`：文件目录/读取/保存；`fields_for()`、`edit_text()`：字段解析和原文局部替换 |
 | `static/app.js` | WebSocket 接收、Canvas 曲线、CSV、配置表单与源码编辑 |
-| `client/include/monitor.hpp`、`client/monitor.cpp` | `start/log/stop`：training 的异步 HTTP 指标客户端 |
 | `launch/webui.launch.py`、`run.ps1`、`run.sh` | ROS 与直接运行入口 |
-| `tests/` | 服务接口、配置编辑、浏览器和 C++ 客户端验证 |
+| `tests/` | 服务接口、配置编辑和浏览器验证 |
 
 ROS 默认订阅 `/telemetry`、`/debug/image/compressed`、`/debug/mask/compressed`、`/gimbal/feedback`、`/gimbal/target_command`、`/gimbal/joint_states`、`/target/state`、`/gimbal/trajectory`、`/hardware/connected`。来源分别为 `vision`、`gimbal`、`command`、`joints`、`ekf`、`mpc.first_point`、`hardware`；消息中没有的状态不会被推算补齐。
-
-training 编译选项为 `ENABLE_MONITOR_CLIENT=ON`（默认）。先启动此服务，再启动 training；training 最后一个端口参数为监控服务端口。新增指标只需：
-
-```cpp
-#include "monitor.hpp"
-monitor::log("process_time_ms", elapsed_ms);
-```
-
-主入口已有 `monitor::start(port)` 和 `monitor::stop()`。客户端每 50 ms 批量提交，HTTP 在独立线程执行；发送失败丢弃该批指标，不阻塞视觉线程等待服务恢复。旧 `WEB_LOG` 宏、旧 SSE 服务及旧页面均已删除。
 
 也可直接向 `POST /api/telemetry` 提交 `{"source":"test","metrics":{"value":1.2}}`，页面自动出现 `test.value` 曲线。完整接口定义见服务自带 `/docs`。
 
@@ -90,4 +78,4 @@ python -m pip install -r src/rm_aa_webUI/requirements-test.txt
 python -m pytest src/rm_aa_webUI/tests/test_server.py -q
 ```
 
-`tests/browser_smoke.py` 使用 Playwright 和已安装的 Chromium/Edge，要求 `--demo` 服务指向名称包含 `webui-smoke-` 的配置副本，避免测试修改实际参数。CMake 的 `monitor_probe` 用于验证 C++ 批量发送至真实 FastAPI 服务。
+`tests/browser_smoke.py` 使用 Playwright 和已安装的 Chromium/Edge，要求 `--demo` 服务指向名称包含 `webui-smoke-` 的配置副本，避免测试修改实际参数。

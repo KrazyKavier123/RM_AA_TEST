@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One FastAPI service for ROS/training monitoring and source configuration editing."""
+"""FastAPI service for ROS monitoring and source configuration editing."""
 import argparse
 import os
 from pathlib import Path

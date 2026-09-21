@@ -8,7 +8,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /ws
 COPY src /ws/src
 COPY licenses /ws/licenses
-COPY training /ws/training
 COPY tools /ws/tools
 RUN python3 -m pip install -r src/rm_aa_webUI/requirements.txt pytest httpx
 RUN . /opt/ros/humble/setup.sh && \

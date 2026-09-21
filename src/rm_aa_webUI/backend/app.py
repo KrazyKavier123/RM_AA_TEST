@@ -18,7 +18,7 @@ from config_files import ConfigFiles, edit_text
 
 
 class Telemetry(BaseModel):
-    source: str = Field(default='training', min_length=1, max_length=64)
+    source: str = Field(default='ros', min_length=1, max_length=64)
     metrics: dict[str, FiniteFloat]
     timestamp_ms: FiniteFloat | None = None
 
@@ -30,7 +30,7 @@ class Sample(BaseModel):
 
 
 class TelemetryBatch(BaseModel):
-    source: str = 'training'
+    source: str = 'ros'
     samples: list[Sample] = Field(max_length=4096)
 
 

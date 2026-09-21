@@ -1,11 +1,11 @@
 #pragma once
-#include "Communication.hpp"
+#include "rm_aa_hardware/Communication.hpp"
 #include <array>
 #include <cstddef>
 #include <vector>
 
 namespace rm_aa_hardware {
-// Communication.hpp is the SAME source file used by training; crc is a state, not a checksum.
+// Communication.hpp is the authoritative wire definition; crc is a state, not a checksum.
 bool wire_platform_supported() noexcept;
 bool valid_feedback(const MessData_AutoAim & frame) noexcept;
 class FrameParser {

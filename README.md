@@ -1,8 +1,6 @@
-**RM_AA：C++17 装甲板视觉、跟踪与 RMVtraining 协议适配工程。**
+**RM_AA：ROS2/C++17 装甲板视觉、跟踪与 64 字节下位机协议适配工程。**
 
-2026-09-20 已按 RMVtraining 要求实现 Linux 独立入口：64字节串口收发、读线程/操作线程、海康取流、检测分类、PnP与实测外参、11维旋转车体EKF、预测指令和数值Web曲线。构建、协议、坐标和配置说明见 [training/README.md](training/README.md)。
-
-原ROS入口保留，视觉像素KF与整车EKF是独立模块。ROS图像网页显示相机观测方位；训练入口数值网页显示PnP、EKF和实际协议输出。两套入口分别启动，不要同时占用同一相机或Web端口。
+项目只保留 ROS2 入口。视觉像素 KF 与整车 EKF 是独立模块；64 字节协议定义和 Linux 串口传输由 `rm_aa_hardware` 包维护。
 
 ROS 电控桥接见 [rm_aa_hardware](src/rm_aa_hardware/README.md)：接收同一 64 字节协议并发布姿态/关节反馈及动态 TF，发送完整目标指令或按时间采样的 MPC 轨迹。通过 `hardware:=true` 启用；默认完整目标消息模式，接入现有 MPC 时需要在硬件 YAML 中选择 trajectory 并配置已知目标 ID。
 
@@ -10,12 +8,10 @@ ROS 电控桥接见 [rm_aa_hardware](src/rm_aa_hardware/README.md)：接收同�
 
 **目录布局**
 
-ROS入口是 `ros2 launch rm_aa_bringup bringup.launch.py`，构建使用 `colcon build --base-paths src`；参数见 [ROS启动说明](docs/startup.md)。任务书的独立串口入口则使用根目录CMake构建生成的 `rm_aa_training`，详见上面的training说明。
+入口是 `ros2 launch rm_aa_bringup bringup.launch.py`，构建使用 `colcon build --base-paths src`；参数见 [ROS启动说明](docs/startup.md)。
 
 ```text
 RM_AA/
-├── CMakeLists.txt                  独立训练入口构建
-├── training/                       双线程主程序、算法适配、原串口协议与Web曲线
 ├── src/
 │   ├── rm_aa_vision/
 │   │   ├── include/rm_aa_vision/     C++模块接口、观测数据结构
@@ -51,7 +47,7 @@ RM_AA/
 | 轨迹恢复 | 超时/时间倒退/数值异常处理；新轨迹重新初始化状态与协方差 | `image_tracker.cpp` |
 | 框与中间量 | 闭合四边形、外接矩形、类别/大小、图像轨迹编号 | `perception_node.cpp` |
 | ROS传输 | PoseArray、CompressedImage及String封装的JSON遥测 | `perception_node.cpp` |
-| Web | FastAPI + WebSocket/HTTP；原生HTML/CSS/JS；ROS/training监控与配置文件编辑 | `src/rm_aa_webUI/` |
+| Web | FastAPI + WebSocket/HTTP；原生HTML/CSS/JS；ROS监控与配置文件编辑 | `src/rm_aa_webUI/` |
 
 装甲检测使用传统OpenCV几何方法；神经网络只负责数字分类。模型来自本地rm_auto_aim，名称为`mlp.onnx`，不使用YOLO、TensorRT或OpenVINO。完整来源见 [THIRD_PARTY.md](THIRD_PARTY.md)。
 
@@ -167,6 +163,6 @@ python -m venv .venv
 powershell -File src/rm_aa_webUI/run.ps1 --demo
 ```
 
-`--demo` 只生成明确标注的 `demo.` 曲线，不运行 C++ 链路。正常监控请去掉该参数；ROS 总入口的 `web:=true` 会启动新服务，training 则向独立启动的服务发送指标。参数页保存源码 YAML/launch，重启相关节点后生效，不能视为运行中热更新。详见 [WebUI 启动与接口](src/rm_aa_webUI/README.md)。
+`--demo` 只生成明确标注的 `demo.` 曲线，不运行 C++ 链路。正常监控请去掉该参数；ROS 总入口的 `web:=true` 会启动服务。参数页保存源码 YAML/launch，重启相关节点后生效，不能视为运行中热更新。详见 [WebUI 启动与接口](src/rm_aa_webUI/README.md)。
 
 详细数据流、限制和验证记录分别见 [架构说明](docs/architecture.md)、[验证记录](docs/validation.md)。

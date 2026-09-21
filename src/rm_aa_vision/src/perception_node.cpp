@@ -36,7 +36,7 @@ struct Frame {
 class PerceptionNode final : public rclcpp::Node {
 public:
   PerceptionNode() : Node("perception") {
-    mode_ = declare_parameter<std::string>("source.mode", "synthetic");
+    mode_ = declare_parameter<std::string>("source.mode", "video");
     SourceConfig source;
     source.mode = mode_;
     source.device = declare_parameter<std::string>("source.device", "0");
@@ -94,12 +94,6 @@ public:
     std::copy(k.begin(), k.end(), camera_.matrix.val);
     camera_.distortion = declare_parameter<std::vector<double>>("calibration.d", {0.0,0.0,0.0,0.0,0.0});
     validate_distortion(camera_.distortion);
-    if (mode_ == "synthetic") {
-      // Fictional intrinsics for synthetic demonstration only.
-      camera_.width = source.width; camera_.height = source.height;
-      camera_.matrix = {1000,0,source.width / 2.0, 0,1000,source.height / 2.0, 0,0,1};
-      camera_.distortion = {0,0,0,0,0}; camera_.calibrated = true;
-    }
     tracker_ = std::make_unique<ImageTracker>(
       declare_parameter<double>("image_tracker.association_px", 80.0),
       declare_parameter<double>("image_tracker.timeout_s", 0.3));
@@ -278,7 +272,7 @@ private:
         const double frame_age_ms = (now() - frame->stamp).seconds() * 1000;
         Json status{{"schema",1}, {"mode",mode_}, {"sequence",frame->sequence},
           {"timestamp_s",frame->stamp.seconds()}, {"frame_id",frame->frame_id},
-          {"calibration_valid",calibration_ok}, {"synthetic_calibration",mode_ == "synthetic"},
+          {"calibration_valid",calibration_ok},
           {"capture_fps",capture_fps}, {"processing_fps",processing_fps},
           {"processing_ms",std::chrono::duration<double,std::milli>(end-start).count()},
           {"debug_ms",std::chrono::duration<double,std::milli>(Clock::now()-end).count()},

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""ROS2 integration smoke: actual synthetic vision -> TF -> EKF -> MPC trajectory."""
+"""Recorded video -> TF -> EKF -> MPC; requires matching calibration and detectable targets."""
+import argparse
 import math
 import subprocess
 import time
@@ -12,6 +13,10 @@ from trajectory_msgs.msg import JointTrajectory
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--video', required=True, help='Absolute video directory or file')
+    parser.add_argument('--config', required=True, help='Absolute perception YAML with matching calibration')
+    args = parser.parse_args()
     rclpy.init()
     node = Node('control_smoke_probe')
     seen = {'observations': 0, 'commands': 0}
@@ -38,7 +43,8 @@ def main():
     node.create_subscription(JointTrajectory, '/gimbal/trajectory', command, 5)
     process = subprocess.Popen([
         'ros2', 'launch', 'rm_aa_bringup', 'tracking.launch.py',
-        'source:=synthetic', 'mock_gimbal:=true', 'web:=false',
+        'source:=video', f'video:={args.video}', f'config:={args.config}',
+        'mock_gimbal:=true', 'web:=false',
     ])
     try:
         deadline = time.monotonic() + 40

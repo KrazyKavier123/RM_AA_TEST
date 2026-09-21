@@ -1,6 +1,6 @@
 # RM_AA 当前源码流程框架与参数说明
 
-> 2026-09-20 更新：共享整车 Tracker 扩展为 11 维，第二半径及高度差说明已更新。新增独立串口入口的完整流程与配置见 [training/README.md](../training/README.md)。本页其余部分主要描述原 ROS 链路；本次核心/适配测试 20/20 通过，验证范围见 [验证记录](validation.md)。
+> 共享整车 Tracker 已扩展为 11 维。项目现仅保留 ROS2 链路，64 字节协议和串口实现归属 `rm_aa_hardware`；验证范围见 [验证记录](validation.md)。
 
 > 2026-09-19 修复更新：本文原记录的两处 include 拼接、TF 调用多余反斜杠、弹道候选时间 NaN 问题已修复；枪口偏移参数也已改为显式构造 Eigen 向量。MSVC Release 独立控制核心构建成功，14/14 项测试通过。下文涉及这些问题的描述为修复前记录，不再表示当前状态；ROS2 节点仍未完成构建验证。详见 [验证记录](validation.md)。
 
@@ -15,7 +15,7 @@
 | `rm_aa_vision` | 取图、预处理、灯条与装甲板检测、数字分类、PnP、二维图像跟踪 | `perception_core` 库；`perception_node`、`perception_cli` |
 | `rm_aa_control` | 固定系观测转换、11 维 EKF、选板、未来位置与弹道计算、双轴 MPC | `camera_control_core` 库；`control_node`；`mock_gimbal.py` |
 | `rm_aa_bringup` | 感知与控制启动配置、组合启动入口 | `perception.launch.py`、`tracking.launch.py` |
-| `rm_aa_webui`（目录 `rm_aa_webUI`） | FastAPI 监控、ROS 订阅桥、training 指标客户端、配置编辑 | `backend/server.py`、`static/`、`client/` |
+| `rm_aa_webui`（目录 `rm_aa_webUI`） | FastAPI 监控、ROS 订阅桥、配置编辑 | `backend/server.py`、`static/` |
 
 ```mermaid
 flowchart TB
@@ -499,8 +499,6 @@ flowchart TB
   Main["server.py / main"] --> Server["app.py / create_app：FastAPI"]
   Server --> ROS["可选 run_ros：订阅遥测、图像与控制话题"]
   ROS --> Hub["Hub：指标历史 / JPEG 缓存"]
-  Training["training monitor::log"] --> Client["client/monitor.cpp：后台 HTTP 批量提交"]
-  Client --> Server
   Server --> Hub
   Hub --> WS["/ws：增量指标与心跳"]
   Hub --> JPEG["/api/frames：JPEG"]
@@ -516,7 +514,6 @@ flowchart TB
 | `backend/app.py` | `create_app()`、`Hub.log/image/snapshot()` | HTTP/WS、共享指标历史和 JPEG 缓存、线程生命周期 |
 | `backend/ros_bridge.py` | `run_ros()`、`numeric_fields()` | ROS 订阅与数值提取 |
 | `backend/config_files.py` | `ConfigFiles`、`fields_for()`、`edit_text()` | 配置目录、类型解析、局部修改、校验及保存 |
-| `client/monitor.cpp` | `monitor::start/log/stop` | training 指标异步发送 |
 | `static/app.js` | WebSocket 回调、`render()`、`draw()` | 自动曲线、时间窗口、暂停、CSV、参数表单和源码编辑 |
 | `static/index.html`、`style.css` | 浏览器加载 | 监控和参数页布局、响应式样式 |
 

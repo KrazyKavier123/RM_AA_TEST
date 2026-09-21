@@ -2,7 +2,7 @@
 
 `hardware_node` 将电控的 64 字节反馈转换为 ROS 姿态、关节状态和动态 TF，并将 ROS 目标指令转换回相同的 64 字节协议。它不运行相机、检测、EKF 或 MPC，也不替代下位机的电机闭环。
 
-构建直接使用 `../../training/serialPort/include/Communication.hpp` 和 `SerialPort.cpp`，协议只有一份源定义。无需构建或运行 training 主程序，也不依赖 OpenCV。构建时请保留完整 RM_AA 目录；安装后的节点不需要读取 training 源文件。参考串口代码的来源与许可说明见根目录 `THIRD_PARTY.md`。
+协议定义和串口传输现在由本包直接维护：`include/rm_aa_hardware/Communication.hpp` 是唯一的 64 字节线协议定义，`src/SerialPort.cpp` 是 Linux 串口实现。硬件节点不依赖已删除的 training 入口，也不依赖 OpenCV。参考串口代码的来源与许可说明见根目录 `THIRD_PARTY.md`。
 
 ## 数据流和接口
 
@@ -35,7 +35,7 @@ flowchart TB
 
 ## 接收反馈与 TF
 
-协议 `yaw/pitch/roll` 单位为 rad，沿用 training 的约定：前、左、上坐标轴，yaw 绕 +Z，pitch 向上为正，roll 绕 +X；姿态矩阵为 `Rz(yaw) * Ry(-pitch) * Rx(roll)`。电控必须使用相同零位及正方向。本实现假设姿态相对于 `gimbal_base`；若电控提供绝对 IMU 姿态而底座会独立运动，需先明确参考系，不能直接混用。
+协议 `yaw/pitch/roll` 单位为 rad，坐标轴为前、左、上，yaw 绕 +Z，pitch 向上为正，roll 绕 +X；姿态矩阵为 `Rz(yaw) * Ry(-pitch) * Rx(roll)`。电控必须使用相同零位及正方向。本实现假设姿态相对于 `gimbal_base`；若电控提供绝对 IMU 姿态而底座会独立运动，需先明确参考系，不能直接混用。
 
 协议没有 MCU 时间戳和实际角速度：
 
@@ -109,10 +109,10 @@ source /opt/ros/humble/setup.bash
 colcon build --base-paths src --packages-up-to rm_aa_hardware
 source install/setup.bash
 ros2 launch rm_aa_hardware hardware.launch.py \
-  hardware_config:=$PWD/src/rm_aa_hardware/config/hardware.yaml
+  hardware_config:=$PWD/src/rm_aa_bringup/config/hardware.yaml
 ```
 
-先填写实际串口设备；只测试姿态接收时无需相机和控制节点。观察：
+硬件配置统一存放在 `src/rm_aa_bringup/config/hardware.yaml`。单独启动本包时必须显式传入 `hardware_config`；通过 bringup 启动时自动传入，硬件包不反向依赖 bringup。先填写实际串口设备；只测试姿态接收时无需相机和控制节点。观察：
 
 ```bash
 ros2 topic echo /gimbal/feedback
@@ -126,10 +126,10 @@ ros2 run tf2_ros tf2_echo gimbal_base gimbal_attitude
 colcon build --base-paths src
 source install/setup.bash
 ros2 launch rm_aa_bringup bringup.launch.py source:=camera hardware:=true \
-  hardware_config:=$PWD/src/rm_aa_hardware/config/hardware.yaml
+  hardware_config:=$PWD/src/rm_aa_bringup/config/hardware.yaml
 ```
 
-`hardware` 默认 false；与 `mock_gimbal:=true`、`use_sim_time:=true` 互斥。不要同时运行 training 程序占用同一串口/相机。
+`hardware` 默认 false；与 `mock_gimbal:=true`、`use_sim_time:=true` 互斥。同一时刻不要让其他程序占用相同串口。
 
 ## 验证
 

@@ -7,6 +7,7 @@
 #include <iostream>
 #include <limits>
 #include <sstream>
+#include <filesystem>
 #include <opencv2/imgproc.hpp>
 #ifdef RM_AA_WITH_HIKROBOT
 #include <MvCameraControl.h>
@@ -139,27 +140,25 @@ struct Source::HikCamera {
 struct Source::HikCamera {};
 #endif
 Source::~Source() = default;
-cv::Mat synthetic_frame(int width, int height, double time_s) {
-  cv::Mat image(height, width, CV_8UC3, cv::Scalar(12, 16, 22));
-  const auto draw = [&](double x, double y, double ratio, cv::Scalar color, const char * label) {
-    const int length = std::max(12, height / 14), spacing = static_cast<int>(length * ratio);
-    const int cx = static_cast<int>(x * width), cy = static_cast<int>(y * height);
-    for (int sign : {-1, 1}) {
-      const int lx = cx + sign * spacing / 2;
-      cv::rectangle(image, cv::Rect(lx - 3, cy - length / 2, 7, length + 1), color, cv::FILLED);
-    }
-    cv::putText(image, label, {cx - 13, cy + 15}, cv::FONT_HERSHEY_SIMPLEX, 1.3, {240,240,240}, 2);
-  };
-  draw(0.28 + 0.07 * std::sin(time_s), 0.38, 2.45, {255,180,180}, "3");
-  draw(0.68 + 0.04 * std::sin(time_s * 0.7), 0.68, 4.09, {255,180,180}, "1");
-  draw(0.65, 0.22, 2.45, {100,100,255}, "4");
-  return image;
-}
 Source::Source(SourceConfig config) : config_(std::move(config)) {
   if (config_.width < 320 || config_.height < 240 || !std::isfinite(config_.fps) || config_.fps <= 0 || config_.fps > 500)
     throw std::invalid_argument("Invalid capture resolution/fps");
-  if (config_.mode == "synthetic") return;
-  if (config_.mode == "video") capture_.open(config_.video_path);
+  if (config_.mode == "video") {
+    namespace fs = std::filesystem;
+    if (config_.video_path.empty()) throw std::invalid_argument("Set source.video_path (or launch video:=) to a video directory or file");
+    if (fs::is_directory(config_.video_path)) {
+      for (const auto & entry : fs::directory_iterator(config_.video_path)) {
+        if (!entry.is_regular_file()) continue;
+        auto ext = entry.path().extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char c) { return std::tolower(c); });
+        if (ext == ".mp4" || ext == ".avi" || ext == ".mkv" || ext == ".mov" || ext == ".m4v" || ext == ".webm")
+          videos_.push_back(entry.path().string());
+      }
+      std::sort(videos_.begin(), videos_.end());
+    } else if (fs::is_regular_file(config_.video_path)) videos_.push_back(config_.video_path);
+    if (videos_.empty()) throw std::runtime_error("No video files found: " + config_.video_path);
+    capture_.open(videos_.front());
+  }
   else if (config_.mode == "camera") {
     if (config_.camera_backend == "hikrobot") {
       if (!std::isfinite(config_.exposure_us) || config_.exposure_us <= 0 ||
@@ -189,7 +188,7 @@ Source::Source(SourceConfig config) : config_(std::move(config)) {
       capture_.set(cv::CAP_PROP_FPS, config_.fps);
       capture_.set(cv::CAP_PROP_BUFFERSIZE, 1);
     }
-  } else throw std::invalid_argument("Source mode must be synthetic, camera or video");
+  } else throw std::invalid_argument("Source mode must be camera or video");
   if (!capture_.isOpened()) throw std::runtime_error("Cannot open capture source");
 }
 double Source::nominal_fps() const {
@@ -200,13 +199,20 @@ bool Source::read(cv::Mat & image) {
 #ifdef RM_AA_WITH_HIKROBOT
   if (hik_camera_) return hik_camera_->read(image);
 #endif
-  if (config_.mode == "synthetic") {
-    image = synthetic_frame(config_.width, config_.height, index_++ / config_.fps); return true;
-  }
+  image.release();
+  if (config_.mode == "video" && video_index_ >= videos_.size()) return false;
   if (capture_.read(image) && !image.empty()) return true;
-  if (config_.mode == "video" && config_.loop_video) {
-    capture_.set(cv::CAP_PROP_POS_FRAMES, 0);
-    return capture_.read(image) && !image.empty();
+  if (config_.mode == "video") {
+    ++video_index_;
+    if (video_index_ == videos_.size()) {
+      if (!config_.loop_video) return false;
+      video_index_ = 0;
+    }
+    if (video_index_ >= videos_.size()) return false;
+    capture_.release();
+    if (!capture_.open(videos_[video_index_]) || !capture_.read(image) || image.empty())
+      throw std::runtime_error("Cannot decode video: " + videos_[video_index_]);
+    return true;
   }
   return false;
 }

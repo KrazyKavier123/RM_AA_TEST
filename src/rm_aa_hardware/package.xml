@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="3">
   <name>rm_aa_hardware</name><version>0.1.0</version>
-  <description>ROS2 C++ bridge for RMVtraining 64-byte gimbal feedback and commands.</description>
+  <description>ROS2 C++ bridge for the 64-byte gimbal feedback and command protocol.</description>
   <maintainer email="maintainer@example.com">RM_AA Maintainer</maintainer>
   <license>MIT</license>
   <buildtool_depend>ament_cmake</buildtool_depend>

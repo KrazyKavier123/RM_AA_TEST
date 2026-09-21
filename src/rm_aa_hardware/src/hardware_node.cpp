@@ -1,7 +1,7 @@
 #include "rm_aa_hardware/protocol.hpp"
 #include "rm_aa_hardware/msg/gimbal_feedback.hpp"
 #include "rm_aa_hardware/msg/target_command.hpp"
-#include "SerialPort.hpp"
+#include "rm_aa_hardware/SerialPort.hpp"
 #include <rclcpp/rclcpp.hpp>
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>

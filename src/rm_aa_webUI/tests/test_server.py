@@ -18,9 +18,8 @@ def workspace(tmp_path):
     launch = tmp_path / 'src/example/launch'
     launch.mkdir()
     (launch / 'test.launch.py').write_text("# 启动参数\nfrom launch.actions import DeclareLaunchArgument\nargument = DeclareLaunchArgument('port', default_value='8080')\n", encoding='utf-8')
-    training = tmp_path / 'training/config'
-    training.mkdir(parents=True)
-    (training / 'camera.yaml').write_text('%YAML:1.0\n---\n# measured matrix\nK: !!opencv-matrix\n  rows: 1\n  cols: 2\n  dt: d\n  data: [ 1., 2. ]\n', encoding='utf-8')
+    vision = tmp_path / 'src/example/config'
+    (vision / 'camera.yaml').write_text('%YAML:1.0\n---\n# measured matrix\nK: !!opencv-matrix\n  rows: 1\n  cols: 2\n  dt: d\n  data: [ 1., 2. ]\n', encoding='utf-8')
     return tmp_path
 
 
@@ -60,7 +59,7 @@ def test_yaml_numeric_save_retains_comments_and_other_values(client, workspace):
 
 
 def test_opencv_matrix_keeps_directive_and_tag(client, workspace):
-    doc = document(client, 'training/config/camera.yaml')
+    doc = document(client, 'src/example/config/camera.yaml')
     response = save(client, doc, **{'/K/data/0': 123.5})
     assert response.status_code == 200, response.text
     text = (workspace / doc['path']).read_text(encoding='utf-8')
@@ -103,12 +102,12 @@ def test_preview_does_not_save(client, workspace):
 
 
 def test_http_to_websocket_history_and_resume(client):
-    assert client.post('/api/telemetry', json={'source': 'training', 'metrics': {'yaw': .2}}).status_code == 200
+    assert client.post('/api/telemetry', json={'source': 'ros', 'metrics': {'yaw': .2}}).status_code == 200
     with client.websocket_connect('/ws') as socket:
         first = socket.receive_json()
-        assert first['samples'][0]['key'] == 'training.yaw'
+        assert first['samples'][0]['key'] == 'ros.yaw'
         after = first['cursor']
-    client.post('/api/telemetry', json={'source': 'training', 'samples': [
+    client.post('/api/telemetry', json={'source': 'ros', 'samples': [
         {'key': 'yaw', 'value': .3, 'timestamp_ms': 1000}, {'key': 'yaw', 'value': .4, 'timestamp_ms': 1010}]})
     with client.websocket_connect(f'/ws?after={after}') as socket:
         packet = socket.receive_json()

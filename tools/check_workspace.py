@@ -33,7 +33,7 @@ def main():
     assert len(config['calibration']['k']) == 9
     assert all(isinstance(value, float) for value in config['calibration']['k'])
     assert config['dimensions']['large_width_m'] > config['dimensions']['small_width_m'] > 0
-    assert config['source']['mode'] == 'synthetic'
+    assert config['source']['mode'] in ('video', 'camera', 'topic')
     control = yaml.safe_load((ROOT / 'src/rm_aa_bringup/config/control.yaml').read_text(encoding='utf-8-sig'))['camera_control']['ros__parameters']
     assert control['observations_topic'] == '/observations'
     assert 1 <= control['tracker']['plate_count'] <= 16

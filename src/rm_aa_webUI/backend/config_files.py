@@ -114,7 +114,7 @@ class ConfigFiles:
 
     def paths(self):
         paths = []
-        for directory in (self.root / 'src', self.root / 'training' / 'config'):
+        for directory in (self.root / 'src',):
             for path in directory.rglob('*'):
                 if not path.is_file() or not path.resolve().is_relative_to(self.root):
                     continue

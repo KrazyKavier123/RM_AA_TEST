@@ -1,4 +1,4 @@
-"""ROS imports stay optional so the same service also runs with training or on Windows."""
+"""ROS imports stay optional so the Web service can still run in demo mode."""
 import json
 
 

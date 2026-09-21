@@ -4,9 +4,10 @@
 #include <string>
 #include <cstdint>
 #include <memory>
+#include <vector>
 namespace rm_aa {
 struct SourceConfig {
-  std::string mode{"synthetic"}, device{"0"}, video_path;
+  std::string mode{"video"}, device{"0"}, video_path;
   int width{1280}, height{720};
   double fps{60};
   bool loop_video{false};
@@ -14,7 +15,6 @@ struct SourceConfig {
   double exposure_us{5000.0}, gain_db{0.0};
   int grab_timeout_ms{1000};
 };
-cv::Mat synthetic_frame(int width, int height, double time_s);
 class Source {
 public:
   explicit Source(SourceConfig config);
@@ -30,6 +30,7 @@ private:
   std::unique_ptr<HikCamera> hik_camera_;
   SourceConfig config_;
   cv::VideoCapture capture_;
-  uint64_t index_{0};
+  std::vector<std::string> videos_;
+  size_t video_index_{0};
 };
 }

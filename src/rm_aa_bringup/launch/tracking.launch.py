@@ -22,7 +22,7 @@ def generate_launch_description():
     hardware = Path(get_package_share_directory('rm_aa_hardware'))
     return LaunchDescription([
         DeclareLaunchArgument('hardware', default_value='false'),
-        DeclareLaunchArgument('hardware_config', default_value=str(hardware / 'config/hardware.yaml')),
+        DeclareLaunchArgument('hardware_config', default_value=str(bringup / 'config/hardware.yaml')),
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('mock_gimbal', default_value='false',
                              description='Fixed camera TF and zero joint feedback for interface demo only'),
