@@ -26,7 +26,7 @@ flowchart TB
   CC["control.yaml"] --> CL
   PL --> PN["perception_node.cpp / main"]
   PL -. "web=true" .-> Web["rm_aa_webui / server.py main"]
-  Camera["UVC / 视频 / 合成图像 / ROS 图像"] --> PN
+  Camera["UVC / 视频目录 / 视频文件 / ROS 图像"] --> PN
   PN --> Core["perception_core：检测、分类、PnP、像素 KF"]
   Core --> Obs["/observations：PoseArray"]
   Core --> Debug["/telemetry + 两路 JPEG"]
@@ -52,7 +52,7 @@ flowchart TB
 | 文件（均相对于项目根目录） | 入口 | 做什么 |
 |---|---|---|
 | `src/rm_aa_vision/src/perception_node.cpp` | `main()` → `PerceptionNode()` → `rclcpp::spin()` | 在线视觉主程序；创建模块、线程、订阅与发布 |
-| `src/rm_aa_vision/src/perception_cli.cpp` | `main()` | 单图/合成图离线检测分类，输出图片和 JSON |
+| `src/rm_aa_vision/src/perception_cli.cpp` | `main()` | 单张输入图离线检测分类，输出图片和 JSON |
 | `src/rm_aa_control/src/control_node.cpp` | `main()` → `ControlNode()` → `rclcpp::spin()` | 在线控制主程序；观测、反馈、定时规划三个入口 |
 | `src/rm_aa_webUI/backend/server.py` | `main()` | 启动 FastAPI 服务与可选 ROS 接收线程 |
 | `src/rm_aa_control/scripts/mock_gimbal.py` | `main()` → `MockGimbal()` → `spin()` | 接口演示用固定 TF、50 Hz 零角度/零速度反馈 |
@@ -139,20 +139,20 @@ flowchart TB
 
 `pending_` 是一个最新帧邮箱，不是持续增长的 FIFO。`dropped` 只表示这个邮箱被覆盖的次数，不包括相机驱动或 DDS 内部的丢帧。
 
-相机模式的时间戳在 `read()` 返回后生成，不是曝光时间；topic 模式保留外部图像时间戳。相机/视频读取失败后退出采集循环，没有自动重连。合成图像是二维绘制演示，并非严格的多板旋转车体仿真。
+相机模式的时间戳在 `read()` 返回后生成，不是曝光时间；topic 模式保留外部图像时间戳。相机/视频读取失败后退出采集循环，没有自动重连。视频模式按每个文件自身的 FPS 节流，读完整组后要么停止（`loop_video=false`）要么从头循环（`loop_video=true`），循环边界不代表物理运动连续。
 
 ### 3.2 每个视觉算法文件的入口
 
 | `.cpp` 文件 | 主要入口与内部调用 | 输入 → 输出 |
 |---|---|---|
-| `source.cpp` | `Source()`；`read()` → `synthetic_frame()` 或 `VideoCapture.read()`；`nominal_fps()` | 输入模式/设备 → BGR 图像 |
+| `source.cpp` | `Source()`；`read()` → `VideoCapture.read()`；`nominal_fps()` | 输入模式/设备或视频目录 → BGR 图像 |
 | `preprocessor.cpp` | `Preprocessor()`；`run()` → `cvtColor` → `threshold` → 可选 `morphologyEx` | BGR8 → 单通道二值 mask |
 | `detector.cpp` | `Detector()`；`find_lights()`；`match()` | BGR+mask → `vector<Light>` → `vector<Plate>` |
 | `classifier.cpp` | `Classifier()` 加载 ONNX；`classify()` → `extract()` → DNN → softmax | 原图+板四角 → 原地更新类别、置信度、有效标记 |
 | `pose_solver.cpp` | `PoseSolver()`；`solve()` → `object_points()` → IPPE → 重投影选解 | 板角点+标定+尺寸 → `optional<PoseObservation>` |
 | `image_tracker.cpp` | `ImageTracker()`；`update()` → 预测、关联、校正/建轨；`reset()` | 所有板中心+时间 → 像素轨迹向量 |
 | `perception_node.cpp` | `main()`；采集/订阅、处理和发布 | 上述模块的在线组织层 |
-| `perception_cli.cpp` | `main()` | 单张输入或合成图 → 检测分类 JSON+叠加图片 |
+| `perception_cli.cpp` | `main()` | 单张输入图 → 检测分类 JSON+叠加图片 |
 
 对应同名 `.hpp` 声明配置、接口和成员。`types.hpp` 统一数据结构：`Light` 保存灯条端点/中心/宽长/颜色；`Plate` 保存板四角、中心、大小板、颜色与分类字段；`PoseObservation` 保存 rvec/tvec、重投影误差与相机方位角。角点顺序统一为 **左上 TL → 右上 TR → 右下 BR → 左下 BL**。
 
@@ -229,7 +229,7 @@ flowchart TB
 
 观测方位角：`bearing_yaw=atan2(tx,tz)`，`bearing_pitch=-atan2(ty,sqrt(tx²+tz²))`。这两个角只是相机视线角，不能直接当作经过外参和重力补偿的云台命令。
 
-主节点还检查标定与当前图像尺寸；topic 模式检查 CameraInfo 坐标系匹配。默认真实相机/视频标定无效，仍可检测但没有 PnP 位姿；synthetic 模式显式改用虚构有效内参。topic 可由有效 CameraInfo 提供标定。
+主节点还检查标定与当前图像尺寸；topic 模式检查 CameraInfo 坐标系匹配。默认相机/视频标定无效，仍可检测但没有 PnP 位姿；video/camera 模式必须由配置提供录制相机真实内参，代码不再生成虚构内参。topic 可由有效 CameraInfo 提供标定。
 
 ## 5. 两种跟踪器及其状态
 
@@ -526,7 +526,7 @@ flowchart TB
 | `tools/calibrate_camera.py` | `main()`：棋盘格图片 → `findChessboardCornersSB` → `calibrateCamera` → 基于模板输出完整感知YAML；参数 `--images/--cols/--rows/--square-m/--output`；至少6个有效视角 |
 | `tools/check_workspace.py` | `main()`：Python AST、包XML、模型哈希/标签、部分配置与OpenCV模型推理检查；**不检查C++能否编译** |
 | `tools/smoke_ros.py` | `main()`：视觉ROS与HTTP集成冒烟入口 |
-| `tools/smoke_control.py` | `main()`：启动合成视觉+mock，观察位姿与至少10次轨迹，检查点数、数值和加速度约束 |
+| `tools/smoke_control.py` | `main()`：以录制视频启动视觉+mock，观察位姿与至少10次轨迹，检查点数、数值和加速度约束 |
 | `tools/build.sh` | shell顶层：加载ROS环境 → `colcon build` |
 | `tools/test.sh` | shell顶层：colcon测试、结果、Web单测、静态资源检查 |
 | `tools/install_deps.sh` / `requirements.txt` | 开发依赖安装与Python依赖列表 |
@@ -552,10 +552,10 @@ flowchart TB
 | 参数 | 当前值 | 影响 |
 |---|---|---|
 | `opencv_threads` | 2 | OpenCV内部线程数 |
-| `source.mode` | synthetic | synthetic/camera/video/topic |
+| `source.mode` | video | camera/video/topic |
 | `source.device` | `"0"` | 相机索引或设备路径 |
-| `source.video_path` | 空字符串 | 视频文件位置 |
-| `source.width / height` | 1280 / 720 | 合成分辨率或相机请求分辨率 |
+| `source.video_path` | 空字符串 | 视频目录（按文件名排序、非递归）或单个视频文件；video 模式留空会报错 |
+| `source.width / height` | 1280 / 720 | 相机请求分辨率；视频保留文件自身尺寸，不缩放 |
 | `source.fps` | 60.0 | 请求/名义帧率，不是实测保证 |
 | `source.loop_video` | false | 视频末尾是否回到开头 |
 | `source.frame_id` | camera_optical_frame | 本地采集图像坐标系 |
@@ -648,14 +648,14 @@ flowchart TB
 | Launch参数 | 默认值 | 作用 |
 |---|---|---|
 | `config` | bringup安装目录的 `config/perception.yaml` | 感知配置文件 |
-| `source` / `device` / `video` | synthetic / `0` / 空 | 覆盖 `source.mode/device/video_path` |
+| `source` / `device` / `video` | video / `0` / 空 | 覆盖 `source.mode/device/video_path` |
 | `web` | true | 启动HTTP调试桥 |
 | `host` / `port` | 127.0.0.1 / 8080 | Web监听地址与端口 |
 | `control_config` | bringup安装目录的 `config/control.yaml` | 控制配置文件 |
 | `use_sim_time` | false | control.launch明确传给控制节点的时钟参数 |
 | `mock_gimbal` | false | tracking.launch开启固定TF与零反馈 |
 
-**容易忽略的覆盖：** 感知 launch 先加载 YAML，再用 `source/device/video` 覆盖。仅修改 YAML 中 `source.mode`，但仍使用默认 launch 参数时，会被 `source:=synthetic` 覆盖。`use_sim_time` 当前明确设置在控制启动文件，不能因此认定视觉和mock自动同步使用模拟时间。
+**容易忽略的覆盖：** 感知 launch 先加载 YAML，再用 `source/device/video` 覆盖。仅修改 YAML 中 `source.mode`，但仍使用默认 launch 参数时，会被 `source:=video` 覆盖。`use_sim_time` 当前明确设置在控制启动文件，不能因此认定视觉和mock自动同步使用模拟时间。
 
 ## 11. 当前源码状态与流程阻塞
 

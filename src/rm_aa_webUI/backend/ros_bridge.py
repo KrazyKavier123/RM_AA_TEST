@@ -16,10 +16,11 @@ def numeric_fields(value, prefix=''):
 
 
 def run_ros(hub, stop):
-    node = context = None
+    node = context = executor = None
     try:
         import rclpy
         from rclpy.context import Context
+        from rclpy.executors import SingleThreadedExecutor
         from rclpy.qos import qos_profile_sensor_data
         from rosidl_runtime_py.convert import message_to_ordereddict
         from sensor_msgs.msg import CompressedImage, JointState
@@ -31,6 +32,8 @@ def run_ros(hub, stop):
         context = Context()
         rclpy.init(args=[], context=context)
         node = rclpy.create_node('rm_aa_monitor', context=context)
+        executor = SingleThreadedExecutor(context=context)
+        executor.add_node(node)
         qos = qos_profile_sensor_data
 
         def record(source, message):
@@ -63,10 +66,12 @@ def run_ros(hub, stop):
         ]
         hub.ros = '已连接 ROS2'
         while not stop.is_set() and context.ok():
-            rclpy.spin_once(node, timeout_sec=0.1)
+            executor.spin_once(timeout_sec=0.1)
     except Exception as error:
         hub.ros = f'ROS 未连接：{error}'
     finally:
+        if executor:
+            executor.shutdown()
         if node:
             node.destroy_node()
         if context and context.ok():

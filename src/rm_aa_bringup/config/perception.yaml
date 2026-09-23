@@ -1,32 +1,36 @@
 perception:
   ros__parameters:
     opencv_threads: 2
+    # 图像源
     source:
-      mode: video
-      device: "0"
-      # camera mode: use Hikrobot MVS SDK. Set uvc for a standard USB webcam.
-      camera_backend: hikrobot
+      mode: video # 模式：video/camera/topic/synthetic
+      device: "0" # 如果指定了海康相机序列号，序列号优先 
+      camera_backend: hikrobot # 只在 mode: camera 时使用。模式：uvc/hikrobot。hikrobot 模式使用海康相机 SDK，uvc 模式使用 OpenCV VideoCapture。
       # Nonempty serial overrides the SDK enumeration index in device.
-      serial_number: ""
-      exposure_us: 5000.0
-      gain_db: 0.0
-      grab_timeout_ms: 1000
-      # Directory (sorted by filename, non-recursive) or a single video file.
-      # Relative paths resolve against the process working directory.
-      video_path: ""
-      width: 1280
-      height: 720
-      fps: 60.0
+      serial_number: "" # 非空：按序列号选择相机 / 空字符串：使用 device 指定的枚举序号。
+
+      # 海康相机模式
+      exposure_us: 20000.0 # 曝光
+      gain_db: 16.0 # 增益
+      grab_timeout_ms: 1000 # SDK 等待一帧图像的最长时间，当前 1000 ms
+
+      # 视频模式
+      video_path: "/home/krazyk/Desktop/RM_AA/tools/test_video"
+      width: 1440 # 分辨率
+      height: 1080 # 分辨率
+      fps: 60.0 # 帧率
       loop_video: false
-      frame_id: camera_optical_frame
+      frame_id: camera_optical_frame # 表示：视觉节点输出的三维位置是在哪个坐标系下表达的。
       image_topic: /camera/image_raw
       camera_info_topic: /camera/camera_info
+
+    # 图像预处理
     preprocess:
       brightness_threshold: 100
       opening_radius: 0
     detector:
-      own_color: red
-      min_light_length: 8.0
+      own_color: red # 模式：red/blue
+      min_light_length: 8.0 # 灯条最大宽长比
       max_light_width_ratio: 0.45
       max_tilt_deg: 35.0
       min_pair_ratio: 1.5
@@ -35,25 +39,30 @@ perception:
       min_length_ratio: 0.65
       max_vertical_ratio: 0.6
       min_color_difference: 8.0
+
     classifier:
       confidence_threshold: 0.7
+
+    # 装甲板实际尺寸
     dimensions:
-      # RMVtraining specification: small 135x57 mm; large 230x57 mm.
       small_width_m: 0.135
       large_width_m: 0.230
       height_m: 0.057
+
+    # 相机标定
     calibration:
-      # False disables PnP on real camera/video until actual calibration is supplied.
-      # Supply the recording camera's actual calibration for video PnP.
-      calibrated: false
-      width: 1280
-      height: 720
-      k: [1000.0, 0.0, 640.0, 0.0, 1000.0, 360.0, 0.0, 0.0, 1.0]
-      d: [0.0, 0.0, 0.0, 0.0, 0.0]
+      calibrated: true
+      width: 1440
+      height: 1080
+      k: [2445.55396626346, 0.0, 684.535092128930,
+          0.0, 2448.65294933799, 571.348315982327,
+          0.0, 0.0, 1.0]
+      d: [-0.00187846645664915, -0.238921268458989,
+          0.0, 0.0, -3.66006743010829]
     pnp:
-      max_reprojection_px: 3.0
+      max_reprojection_px: 3.0 # 重投影误差
     image_tracker:
-      association_px: 80.0
+      association_px: 80.0 # 预测轨迹中心与新检测中心的最大关联距离。超过 80 像素就不会关联，而是建立新轨迹 ID。
       timeout_s: 0.3
     debug:
       fps: 10.0

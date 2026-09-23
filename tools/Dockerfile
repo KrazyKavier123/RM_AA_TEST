@@ -16,4 +16,4 @@ RUN . /opt/ros/humble/setup.sh && \
     colcon test --return-code-on-test-failure --event-handlers console_direct+ && \
     colcon test-result --verbose && \
     python3 -m pytest src/rm_aa_webUI/tests/test_server.py -q && python3 tools/check_workspace.py
-CMD ["bash", "-c", "source /ws/install/setup.bash && python3 tools/smoke_ros.py"]
+CMD ["bash"]

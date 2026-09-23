@@ -8,11 +8,9 @@ import signal
 import socket
 import subprocess
 import time
-import math
 from websockets.sync.client import connect
 from urllib.error import URLError
 from urllib.request import urlopen
-
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -24,13 +22,16 @@ def main():
     workspace = Path(__file__).resolve().parents[1]
     output = workspace / 'output'
     output.mkdir(exist_ok=True)
+    video = str(Path(args.video).expanduser().resolve())
+    if not Path(video).exists():
+        raise FileNotFoundError(f'Video path does not exist: {video}')
     with socket.socket() as reservation:
         reservation.bind(('127.0.0.1', 0))
         port = reservation.getsockname()[1]
     with (output / 'ros_smoke.log').open('w') as log:
         process = subprocess.Popen(
             ['ros2', 'launch', 'rm_aa_bringup', 'perception.launch.py', f'port:={port}',
-             'source:=video', f'video:={args.video}'] + ([f'config:={args.config}'] if args.config else []),
+             'source:=video', f'video:={video}'] + ([f'config:={args.config}'] if args.config else []),
             stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         try:
             deadline = time.monotonic() + 30

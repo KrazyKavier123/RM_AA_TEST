@@ -8,7 +8,7 @@ ROS 硬件接口现由 [rm_aa_hardware](../src/rm_aa_hardware/README.md) 提供�
 
 ```mermaid
 flowchart LR
-  A[海康 SDK / UVC / 视频 / 合成场景] --> B[最新帧缓存]
+  A[海康 SDK / UVC / 视频目录 / 视频文件] --> B[最新帧缓存]
   C[外部ROS2相机] --> B
   B --> D[灰度与二值化]
   D --> E[灯条轮廓与几何配对]

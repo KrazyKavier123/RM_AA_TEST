@@ -95,7 +95,7 @@ colcon build --packages-up-to rm_aa_bringup --cmake-args -DCMAKE_BUILD_TYPE=Rele
 source install/setup.bash
 colcon test --packages-select rm_aa_control --event-handlers console_direct+
 colcon test-result --verbose
-python3 tools/smoke_control.py  # 实际合成视觉到控制话题的集成冒烟检查
+python3 tools/smoke_control.py --video /absolute/path/videos  # 录制视频到控制话题的集成冒烟检查
 
 # 视觉已运行时，只启动控制节点；先在 src/rm_aa_bringup/config/control.yaml 中设置实物参数和话题
 ros2 launch rm_aa_bringup control.launch.py
@@ -103,13 +103,13 @@ ros2 launch rm_aa_bringup control.launch.py
 # 同时启动现有视觉和控制（source/config/device/video/web 参数沿用视觉 launch）
 ros2 launch rm_aa_bringup tracking.launch.py source:=topic
 
-# 合成视觉 + 静态坐标变换 + 零位反馈，仅验证接口
-ros2 launch rm_aa_bringup tracking.launch.py source:=synthetic mock_gimbal:=true
+# 本地视频 + 静态坐标变换 + 零位反馈，仅验证接口
+ros2 launch rm_aa_bringup tracking.launch.py source:=video video:=/absolute/path/videos mock_gimbal:=true
 ros2 topic echo /control/status
 ros2 topic echo /gimbal/trajectory --once
 ```
 
-`mock_gimbal` 默认关闭；示例不跟随输出指令，因此不是完整闭环仿真。现有合成图像也不是严格的多板转动车体渲染，算法闭环行为由独立单元测试验证。
+`mock_gimbal` 默认关闭；示例不跟随输出指令，因此不是完整闭环仿真。录制视频的重演也不是严格的多板转动车体渲染，算法闭环行为由独立单元测试验证。
 
 核心算法可脱离 ROS2 测试（需要 Eigen3、GoogleTest、CMake、C++17 编译器）：
 

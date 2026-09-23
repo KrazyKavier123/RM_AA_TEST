@@ -25,12 +25,12 @@ ros2 launch rm_aa_bringup bringup.launch.py
 
 新 Web 服务需先安装 `src/rm_aa_webUI/requirements.txt` 中的 Python 依赖，具体 Python/ROS 环境与单独启动方式见 [WebUI说明](../src/rm_aa_webUI/README.md)。网页可编辑源码配置；保存后需重启相关节点，复制安装的配置还需重新构建。
 
-默认使用合成图像，开启控制和 Web；mock 默认关闭。没有外部 TF/关节反馈时控制节点会等待有效输入。浏览器地址为 `http://127.0.0.1:8080`。
+默认 `source:=video`，需要指定视频目录或文件，开启控制和 Web；mock 默认关闭。没有外部 TF/关节反馈时控制节点会等待有效输入。浏览器地址为 `http://127.0.0.1:8080`。
 
-无硬件接口演示（合成图像、固定 TF、零位反馈）：
+无硬件接口演示（本地视频、固定 TF、零位反馈）：
 
 ```bash
-ros2 launch rm_aa_bringup bringup.launch.py mock_gimbal:=true
+ros2 launch rm_aa_bringup bringup.launch.py video:=/absolute/path/videos mock_gimbal:=true
 ```
 
 真实海康相机（先按 [海康接入说明](hikrobot_camera.md) 安装并编译MVS支持；需要真实标定、外部云台反馈及 TF；普通UVC相机另设 `source.camera_backend: uvc`）：
@@ -60,7 +60,7 @@ ros2 launch rm_aa_bringup bringup.launch.py \
 |---|---|---|
 | `config` | bringup安装目录/config/perception.yaml | 视觉配置 |
 | `control_config` | bringup安装目录/config/control.yaml | 控制配置 |
-| `source` | synthetic | synthetic/camera/video/topic |
+| `source` | video | camera/video/topic |
 | `device` | 0 | 相机设备 |
 | `video` | 空 | 视频路径；配合source:=video |
 | `web` | true | 是否启动Web |

@@ -1,6 +1,6 @@
 # 海康工业相机取流
 
-`Source` 的 `camera` 模式现在默认使用海康 MVS SDK，支持 SDK 枚举的 USB3 Vision 与 GigE Vision 相机。普通 UVC 相机仍可通过 `source.camera_backend: uvc` 使用原来的 OpenCV 路径。synthetic、video 和 topic 模式不依赖 SDK。
+`Source` 的 `camera` 模式现在默认使用海康 MVS SDK，支持 SDK 枚举的 USB3 Vision 与 GigE Vision 相机。普通 UVC 相机仍可通过 `source.camera_backend: uvc` 使用原来的 OpenCV 路径。video 和 topic 模式不依赖 SDK。
 
 ## SDK 与构建
 
@@ -84,4 +84,4 @@ MV_CC_Initialize（进程级）
 
 在Windows使用实际MVS头文件与官方OpenCV 4.10.0头文件，对 `source.cpp` 的SDK启用/禁用分支完成MSVC编译检查。此检查只生成目标文件，不链接Linux SDK、不连接相机。
 
-新增无硬件Source测试：合成帧内存独立性、非法后端/曝光/超时参数拒绝。实际Linux动态链接、USB/GigE枚举、像素转换和连续取帧仍需在安装MVS的Linux主机及相机上验证；本机无ROS2和相机，不能宣称完成实机联调。
+新增无硬件Source测试：视频目录排序、整组播完停止、单文件输入与循环、缺失输入报错，以及非法后端/曝光/超时参数拒绝。实际Linux动态链接、USB/GigE枚举、像素转换和连续取帧仍需在安装MVS的Linux主机及相机上验证；本机无ROS2和相机，不能宣称完成实机联调。

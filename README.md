@@ -34,7 +34,7 @@ RM_AA/
 
 | 环节 | 技术实现 | 源码 |
 |---|---|---|
-| 相机/视频取流 | 海康MVS SDK；可选OpenCV VideoCapture/UVC；支持视频、合成帧、外部ROS图像话题 | `source.cpp`、`perception_node.cpp` |
+| 相机/视频取流 | 海康MVS SDK；可选OpenCV VideoCapture/UVC；支持视频目录/文件、相机、外部ROS图像话题 | `source.cpp`、`perception_node.cpp` |
 | 帧缓存 | 独立采集/处理线程，单槽缓存覆盖旧帧，避免处理积压 | `perception_node.cpp` |
 | 图像预处理 | BGR转灰度、亮度二值化、可选形态学开运算（腐蚀再膨胀），默认关闭开运算 | `preprocessor.cpp` |
 | 灯条提取 | findContours、minAreaRect、长度/宽度/倾角过滤、轮廓内B/R均值判断颜色 | `detector.cpp` |
@@ -65,7 +65,7 @@ source install/setup.bash
 ros2 launch rm_aa_bringup perception.launch.py
 ```
 
-浏览器打开 `http://127.0.0.1:8080`。默认运行C++合成场景，经过实际检测/分类/PnP模块；合成图案不保证与数字模型训练集一致，分类被拒绝时会显示橙框。这不是准确率测试。
+浏览器打开 `http://127.0.0.1:8080`。默认 `source:=video`，必须通过 `video:=` 或 YAML `source.video_path` 指定视频目录/文件，留空会明确报错并退出，不再生成图像。视频帧经过实际检测/分类/PnP模块；分类被拒绝时会显示橙框。这不是准确率测试，只有录制相机有匹配标定时才输出PnP。
 
 海康工业相机（先按 [海康接入说明](docs/hikrobot_camera.md) 安装完整MVS SDK并启用构建）：
 
@@ -91,7 +91,7 @@ ros2 launch rm_aa_bringup perception.launch.py source:=topic
 
 **标定与大小板尺寸**
 
-真实相机和视频默认 `calibration.calibrated: false`，此时仍输出检测与图像轨迹，但不输出PnP。填入真实内参、畸变参数和标定分辨率后改为true。参数与当前图像尺寸不一致时不解算PnP。合成场景使用明确标识的虚拟内参。
+真实相机和视频默认 `calibration.calibrated: false`，此时仍输出检测与图像轨迹，但不输出PnP。填入真实内参、畸变参数和标定分辨率后改为true。参数与当前图像尺寸不一致时不解算PnP。video/camera 模式都要求录制相机或设备自身的真实标定，代码不再提供虚构内参。
 
 默认小板135×55mm、大板225×55mm，来自本地rm_auto_aim。按题目实体装甲尺寸修改 `dimensions.*`，这里的四点对应两条灯条的端点，不能直接替换成装甲外壳宽高。尺寸单位为米。
 
@@ -149,7 +149,7 @@ docker build -t rm-aa-verify:local -f tools/Dockerfile .
 docker run --rm rm-aa-verify:local
 ```
 
-镜像构建执行C++及Web测试；最后一条命令执行合成图像经过C++、ROS消息和HTTP的集成检查。
+镜像构建执行C++及Web测试，并进入容器 shell。若要执行视频输入经过C++、ROS消息和HTTP的集成检查，请挂载录制文件并运行 `python3 tools/smoke_ros.py --video /absolute/path/videos`。
 
 Windows只预览网页和检查资源：
 

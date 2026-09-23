@@ -1,52 +1,56 @@
 ﻿camera_control:
   ros__parameters:
-    fixed_frame: odom
-    gimbal_base_frame: gimbal_base
-    camera_frame: camera_optical_frame
-    # Camera optical centre -> P axis, expressed in optical axes (right/down/forward), metres.
-    # Must agree with the external camera TF; restart after calibration changes.
-    # Pending confirmation of the supplied calibration's units and axes.
-    camera_to_pitch_optical_m: [0.06711, 0.0, 0.0515]
-    camera_offset_tolerance_m: 0.005
-    # P-axis centre -> muzzle, expressed in the pitch frame (forward/left/up), metres.
-    pitch_to_barrel_m: [0.0741, 0.0, 0.0]
+    # 坐标系与机械几何
+    fixed_frame: odom # 世界系
+    gimbal_base_frame: gimbal_base # 云台基座
+    camera_frame: camera_optical_frame # 光心坐标系
+    camera_to_pitch_optical_m: [0.06711, 0.0, 0.0515] # 光心坐标系到俯仰光心坐标系的平移
+    camera_offset_tolerance_m: 0.005 # ·TF 推出的相机位置与上面这个标定值偏差超过 5 mm 时报 camera_tf_mismatch 并停止输出。这是防止改了机械件或 TF 写错却还在打靶的安全措施。
+    pitch_to_barrel_m: [0.0741, 0.0, 0.0] # 俯仰光心坐标系到枪口坐标系的平移
+
     ballistics:
-      bullet_speed_mps: 22.0
-      bullet_speed_topic: /gimbal/bullet_speed
-      gravity_mps2: 9.7833
+      bullet_speed_mps: 22.0 # 子弹初速 m/s
+      bullet_speed_topic: /gimbal/bullet_speed 
+      gravity_mps2: 9.7833 # 重力加速度
+
+    # 话题、关节与时间窗口
     observations_topic: /observations
     feedback_topic: /gimbal/joint_states
     yaw_joint: gimbal_yaw_joint
     pitch_joint: gimbal_pitch_joint
     roll_joint: gimbal_roll_joint
-    feedback_timeout_s: 0.15
-    observation_max_age_s: 0.2
-    # vision PnP object +Z points into the vehicle for a front-facing plate.
-    plate_normal_sign: 1.0
+    feedback_timeout_s: 0.15 # 关节反馈超过 150 ms 没更新就报 waiting_for_feedback 并停止发送指令。
+    observation_max_age_s: 0.2 # 观测时间戳太旧（或来自未来）直接丢弃
+    plate_normal_sign: 1.0 # 装甲板法向符号，只能取 ±1。视觉 PnP 的物体 +Z 对正对相机的板是"指向车内"，用它决定"内法向"，再算板朝向角
+
     tracker:
       alternating_geometry: true
       max_height_difference_m: 0.3
-      plate_count: 4
-      radius_m: 0.25
-      min_radius_m: 0.05
-      max_radius_m: 0.8
-      acceleration_variance: 4.0
-      angular_acceleration_variance: 16.0
-      position_variance: 0.0025
-      yaw_variance: 0.04
-      association_distance_m: 0.5
-      association_yaw_rad: 1.0
-      nis_gate: 18.47
-      timeout_s: 0.3
-      switch_margin_m: 0.05
+      plate_count: 4 # 装甲板数量
+      radius_m: 0.25 # MPC半径初始值
+      min_radius_m: 0.05 # EKF测量的硬性约束
+      max_radius_m: 0.8 # EKF测量的硬性约束
+      acceleration_variance: 4.0 # 加速度方差
+      angular_acceleration_variance: 16.0 # 角加速度方差
+      position_variance: 0.0025 # 位置方差
+      yaw_variance: 0.04 # Yaw方差
+      association_distance_m: 0.5 # 关联距离
+      association_yaw_rad: 1.0 # 关联Yaw角度
+      nis_gate: 18.47 # 统计外点门限
+      timeout_s: 0.3 # 300 ms 没有一次被接受的更新就判定目标丢失
+      switch_margin_m: 0.05 # 新板必须比当前板近 5 cm 才切，防止在边界反复跳板
+
+    # yaw/pitch 各一个独立二维轴 MPC
+    # 代价是 Σ_k [angle_weight·(角度误差)² + velocity_weight·(角速度误差)²] + effort_weight·Σ u²，决策量是各步角加速度，用带投影的梯度法求解。
+    # 预测步数/预测时域是 horizon * dt_s = 0.5 s/规划未来 0.5 秒的 25 个轨迹点，最多用 300 次优化迭代求解。
     mpc:
-      horizon: 25
-      dt_s: 0.02
-      iterations: 300
-      angle_weight: 40.0
-      velocity_weight: 1.0
-      effort_weight: 0.1
-      yaw_max_acceleration: 6.0
-      pitch_max_acceleration: 4.0
-      tolerance: 0.00001
+      horizon: 25 # MPC的控制量矩阵U的预测点数窗口大小
+      dt_s: 0.02 # MPC预测步长
+      angle_weight: 40.0 # 角度误差的代价权重
+      velocity_weight: 1.0 # 角速度误差的代价权重
+      effort_weight: 0.1 # 控制量的代价权重
+      yaw_max_acceleration: 6.0 # 最大角加速度
+      pitch_max_acceleration: 4.0 # 最大角加速度
+      iterations: 300 # 迭代算法上限
+      tolerance: 0.00001 # 迭代算法收敛阈值
 
