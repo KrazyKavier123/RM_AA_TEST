@@ -129,7 +129,7 @@ ros2 launch rm_aa_bringup bringup.launch.py source:=camera hardware:=true \
   hardware_config:=$PWD/src/rm_aa_bringup/config/hardware.yaml
 ```
 
-`hardware` 默认 false；与 `mock_gimbal:=true`、`use_sim_time:=true` 互斥。同一时刻不要让其他程序占用相同串口。
+`hardware` 默认 false；与 `use_sim_time:=true` 互斥。同一时刻不要让其他程序占用相同串口。
 
 ## 验证
 
@@ -138,7 +138,7 @@ colcon test --packages-select rm_aa_hardware --event-handlers console_direct+
 colcon test-result --verbose
 ```
 
-包含原生协议测试和 `test_hardware_pty.py`：Linux 伪终端模拟电控，启动真实 C++ 节点，检查分包接收、ROS 反馈和 TF、完整命令发送、轨迹轴名映射、禁止开火和超时回退。测试不访问真实串口设备。
+包含协议核心测试 `test/test_protocol.cpp`：线协议字段偏移与单位、分包粘包与干扰恢复、非法数值拒绝、开火门控和轨迹时间取样。测试不访问真实串口设备。
 
 无 ROS 的 Windows/Linux 环境可单独测试协议核心：
 
@@ -148,4 +148,4 @@ cmake --build output/hardware-core-build --config Release
 ctest --test-dir output/hardware-core-build -C Release --output-on-failure
 ```
 
-本次 Windows/MSVC 已通过 9 项协议核心测试；当前环境没有可用 ROS2/Linux 运行环境，ROS 节点构建、伪串口集成测试、真实电控与 TF 联调尚未执行。主机接收时间戳和差分速度不能替代硬件时间同步及实测速度。
+本次 Windows/MSVC 已通过 9 项协议核心测试；当前环境没有可用 ROS2/Linux 运行环境，ROS 节点构建、真实电控与 TF 联调尚未执行。主机接收时间戳和差分速度不能替代硬件时间同步及实测速度。

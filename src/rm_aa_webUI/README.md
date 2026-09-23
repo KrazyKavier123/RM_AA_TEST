@@ -70,12 +70,3 @@ flowchart LR
 ROS 默认订阅 `/telemetry`、`/debug/image/compressed`、`/debug/mask/compressed`、`/gimbal/feedback`、`/gimbal/target_command`、`/gimbal/joint_states`、`/target/state`、`/gimbal/trajectory`、`/hardware/connected`。来源分别为 `vision`、`gimbal`、`command`、`joints`、`ekf`、`mpc.first_point`、`hardware`；消息中没有的状态不会被推算补齐。
 
 也可直接向 `POST /api/telemetry` 提交 `{"source":"test","metrics":{"value":1.2}}`，页面自动出现 `test.value` 曲线。完整接口定义见服务自带 `/docs`。
-
-## 验证
-
-```bash
-python -m pip install -r src/rm_aa_webUI/requirements-test.txt
-python -m pytest src/rm_aa_webUI/tests/test_server.py -q
-```
-
-`tests/browser_smoke.py` 使用 Playwright 和已安装的 Chromium/Edge，要求 `--demo` 服务指向名称包含 `webui-smoke-` 的配置副本，避免测试修改实际参数。

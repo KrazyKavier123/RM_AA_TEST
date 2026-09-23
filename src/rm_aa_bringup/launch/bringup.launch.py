@@ -1,4 +1,4 @@
-"""Start the project: perception, tracking/control and optional web/mock nodes."""
+"""Start the project: perception, tracking/control and optional web node."""
 
 from pathlib import Path
 
@@ -23,16 +23,14 @@ def generate_launch_description():
         DeclareLaunchArgument('web', default_value='true'),
         DeclareLaunchArgument('host', default_value='127.0.0.1'),
         DeclareLaunchArgument('port', default_value='8080'),
-        DeclareLaunchArgument('mock_gimbal', default_value='false',
-                             description='Provide fixed TF and zero feedback for interface demos'),
         DeclareLaunchArgument('hardware', default_value='false',
-                             description='Start the 64-byte gimbal serial bridge; incompatible with mock_gimbal'),
+                             description='Start the 64-byte gimbal serial bridge'),
         DeclareLaunchArgument('hardware_config', default_value=str(share / 'config/hardware.yaml')),
         DeclareLaunchArgument('use_sim_time', default_value='false',
                              description='Use /clock for the control node; external sources must use matching time'),
     ]
     names = ('config', 'control_config', 'source', 'device', 'video',
-             'web', 'host', 'port', 'mock_gimbal', 'use_sim_time', 'hardware', 'hardware_config')
+             'web', 'host', 'port', 'use_sim_time', 'hardware', 'hardware_config')
     return LaunchDescription(arguments + [
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(str(share / 'launch/tracking.launch.py')),

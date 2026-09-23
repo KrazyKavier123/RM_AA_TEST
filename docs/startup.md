@@ -1,6 +1,6 @@
 # 统一启动入口
 
-`rm_aa_bringup/launch/bringup.launch.py` 复用 `tracking.launch.py`，一次启动项目已有的视觉、控制和 Web 调试节点。mock 云台按参数开启。相机专有驱动、实际云台驱动及定位/TF 数据源需要外部提供。
+`rm_aa_bringup/launch/bringup.launch.py` 复用 `tracking.launch.py`，一次启动项目已有的视觉、控制和 Web 调试节点。相机专有驱动、实际云台驱动及定位/TF 数据源需要外部提供。
 
 ```text
 bringup.launch.py
@@ -10,7 +10,6 @@ bringup.launch.py
     │   └── rm_aa_webui/server.py（web=true，FastAPI + WebSocket/HTTP）
     ├── control.launch.py
     │   └── control_node
-    └── mock_gimbal.py（mock_gimbal=true）
 ```
 
 ## 构建与启动
@@ -25,13 +24,7 @@ ros2 launch rm_aa_bringup bringup.launch.py
 
 新 Web 服务需先安装 `src/rm_aa_webUI/requirements.txt` 中的 Python 依赖，具体 Python/ROS 环境与单独启动方式见 [WebUI说明](../src/rm_aa_webUI/README.md)。网页可编辑源码配置；保存后需重启相关节点，复制安装的配置还需重新构建。
 
-默认 `source:=video`，需要指定视频目录或文件，开启控制和 Web；mock 默认关闭。没有外部 TF/关节反馈时控制节点会等待有效输入。浏览器地址为 `http://127.0.0.1:8080`。
-
-无硬件接口演示（本地视频、固定 TF、零位反馈）：
-
-```bash
-ros2 launch rm_aa_bringup bringup.launch.py video:=/absolute/path/videos mock_gimbal:=true
-```
+默认 `source:=video`，需要指定视频目录或文件，开启控制和 Web。没有外部 TF/关节反馈时控制节点会等待有效输入。浏览器地址为 `http://127.0.0.1:8080`。
 
 真实海康相机（先按 [海康接入说明](hikrobot_camera.md) 安装并编译MVS支持；需要真实标定、外部云台反馈及 TF；普通UVC相机另设 `source.camera_backend: uvc`）：
 
@@ -65,7 +58,6 @@ ros2 launch rm_aa_bringup bringup.launch.py \
 | `video` | 空 | 视频路径；配合source:=video |
 | `web` | true | 是否启动Web |
 | `host` / `port` | 127.0.0.1 / 8080 | Web监听地址 |
-| `mock_gimbal` | false | 固定TF与零位反馈，不跟随轨迹运动 |
 | `use_sim_time` | false | 沿用control.launch行为，仅显式配置控制节点；其他数据源需使用一致时钟 |
 
 `source/device/video` 会覆盖视觉 YAML 中对应值。可通过 `--show-args` 查看启动参数。现有 CMake 安装整个 launch 目录，新入口无需单独增加安装项。

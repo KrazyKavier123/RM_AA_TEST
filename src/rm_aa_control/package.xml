@@ -9,7 +9,7 @@
   <depend>eigen</depend>
   <depend>rclcpp</depend><depend>rcl_interfaces</depend>
   <depend>geometry_msgs</depend><depend>sensor_msgs</depend><depend>nav_msgs</depend>
-  <depend>trajectory_msgs</depend><depend>std_msgs</depend><depend>tf2_ros</depend>
+  <depend>trajectory_msgs</depend><depend>std_msgs</depend><depend>tf2_ros</depend><depend>rm_aa_hardware</depend>
   <exec_depend>rclpy</exec_depend>
   <test_depend>ament_cmake_gtest</test_depend>
   <export><build_type>ament_cmake</build_type></export>

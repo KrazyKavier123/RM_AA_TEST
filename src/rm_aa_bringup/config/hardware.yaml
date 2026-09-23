@@ -1,0 +1,23 @@
+rm_aa_hardware:
+  ros__parameters:
+    serial:
+      device: /dev/ttyACM0
+      baud_rate: 115200
+      tx_rate_hz: 100.0
+      reconnect_s: 1.0
+    feedback_timeout_s: 0.15 # 如果超过 150 ms 没有收到新的云台反馈
+    command_timeout_s: 0.15 # ROS 控制指令的有效时间
+    command_source: target_command # 订阅/gimbal/target_command作为指令。模式 target_command/trajectory
+    trajectory_target_id: 1 # 机器人装甲板编号
+    enable_fire: true
+    joint_names: [gimbal_yaw_joint, gimbal_pitch_joint, gimbal_roll_joint] # 云台关节名称 分别表示yaw pitch roll
+    base_frame: gimbal_base
+    attitude_frame: gimbal_attitude
+    camera_frame: camera_optical_frame
+    fixed_frame: odom # 固定坐标系 可选：odom/gimbal_base/gimbal_attitude/camera_optical_frame
+    publish_attitude_tf: true
+    publish_fixed_base_tf: true # 由 hardware_node 发布一条恒等的静态 TF，使得gimbal_base 与 odom 完全重合，即底盘永远不移动、不旋转
+    publish_camera_tf: true
+    camera_extrinsics_calibrated: true
+    camera_translation_m: [-0.0515, 0.06711, 0.0] # 相机相对俯仰轴位置
+    camera_quaternion_xyzw: [-0.5, 0.5, -0.5, 0.5] # 朝向正前方

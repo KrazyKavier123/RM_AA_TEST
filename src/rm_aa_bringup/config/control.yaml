@@ -14,7 +14,7 @@
       gravity_mps2: 9.7833 # 重力加速度
 
     # 话题、关节与时间窗口
-    observations_topic: /observations
+    observations_topic: /observations # 可选选项： /telemetry/observations
     feedback_topic: /gimbal/joint_states
     yaw_joint: gimbal_yaw_joint
     pitch_joint: gimbal_pitch_joint

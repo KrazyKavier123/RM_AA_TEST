@@ -6,21 +6,20 @@
 
 - FastAPI/Pytest **11/11 通过**：YAML 类型与注释、OpenCV 配置、launch 字面量、语法错误、外部写入冲突、路径范围、预览不落盘、HTTP/WS 多客户端与历史、JPEG 等。
 - Windows/MSVC Release 重新构建 `monitor_client` 及原核心成功，原 CTest **20/20 通过**。
-- 实际 `monitor_probe.exe` → HTTP → FastAPI → WebSocket 验证通过，两个连续 yaw 样本及 pitch 样本值完整保留。
 - 本机 Edge/Playwright 浏览器验证通过：自动曲线、暂停/继续、CSV 下载、折叠、YAML 保存、launch 默认值保存、源码语法拒绝与有效保存、清空、390px 窄屏；无页面 JavaScript 错误。测试只修改 `output/webui-smoke-*` 配置副本。
 - 截图：`output/ui-monitor.png`、`ui-config.png`、`ui-mobile.png`；曲线为明确标注的演示数据。
 
-**尚未完成：Linux ROS2 包构建、ROS 话题到网页的现场联调、真实相机和电控联调。** `tools/smoke_ros.py` 已改为验证新 WS/JPEG 接口，但当前 Windows 环境无法执行。参数保存只改变磁盘配置，未实现运行中 ROS 参数热更新。
+**尚未完成：Linux ROS2 包构建、ROS 话题到网页的现场联调、真实相机和电控联调。** 参数保存只改变磁盘配置，未实现运行中 ROS 参数热更新。
 
 ## 2026-09-20：ROS2 C++ 电控桥接
 
-新增 `src/rm_aa_hardware`，直接复用 training 的 Communication.hpp 和 SerialPort.cpp；没有复制修改协议字段。新增接收姿态、差分关节速度、动态 TF、完整目标消息映射、MPC 轨迹时间取样和收发超时处理。总 launch 增加硬件开关及 mock/sim_time 互斥检查。
+新增 `src/rm_aa_hardware`，直接复用 training 的 Communication.hpp 和 SerialPort.cpp；没有复制修改协议字段。新增接收姿态、差分关节速度、动态 TF、完整目标消息映射、MPC 轨迹时间取样和收发超时处理。总 launch 增加硬件开关及 use_sim_time 互斥检查。
 
 控制节点新增可选 roll 反馈，用于相机偏移与 TF 的一致性检查；保留反馈原始整数纳秒用于 TF 查询，避免 double 秒往返转换后超出最新动态 TF 时间。没有将 ROS 控制器改成三轴电机控制。
 
 Windows/MSVC Release 成功构建协议核心，CTest **9/9 项通过**：线协议字节偏移与单位、分包粘包和干扰恢复、坏尾/NaN恢复、无目标/过期标志/模式限制、开火门控、角度跨界差分和断流恢复、pitch/roll 四元数、轨迹时间取样及非法数据拒绝。日志位于 `output/hardware-core-build/Testing/Temporary/LastTest.log`。
 
-新增 Linux ROS2 伪串口测试 `test/test_hardware_pty.py`，覆盖实际节点接收、关节反馈、TF、完整指令、轨迹轴名映射、收发超时与禁火；**当前没有可用 ROS2/Linux 运行环境，该测试尚未执行，ROS 节点尚未完成构建验证**。真实电控、海康及动态 TF 联调也未执行。Python launch/测试脚本完成语法解析，package.xml 和 YAML 完成格式检查。这些检查不替代 ROS2 构建及运行。
+伪终端集成测试已删除，只保留协议核心测试；**当时没有可用 ROS2/Linux 运行环境，ROS 节点尚未完成构建验证**。真实电控、海康及动态 TF 联调也未执行。Python launch/测试脚本完成语法解析，package.xml 和 YAML 完成格式检查。这些检查不替代 ROS2 构建及运行。
 
 ## 2026-09-20：RMVtraining 框架、协议和算法适配
 
@@ -42,7 +41,7 @@ CTest **20/20 项通过**，包含原有控制测试、新增交替半径/高度
 
 构建与 CTest 日志：`output/training-build.log`、`output/training-build/Testing/Temporary/LastTest.log`。本地编译 OpenCV 的源码、依赖安装及构建缓存均位于 `output/`，不属于需要部署的项目源码。
 
-未验证：Linux 上的 `rm_aa_training` 可执行文件构建、真实/伪终端串口收发、Web 浏览器连续访问、海康 SDK 实机取流、ROS2 colcon 与 launch、真实运动目标和实际执行机构闭环。因此这些单元测试不表示已通过任务书的现场验收。相机内外参模板保持未标定，必须填入实测数据后才能启动。
+未验证：Linux 上的 `rm_aa_training` 可执行文件构建、真实串口收发、Web 浏览器连续访问、海康 SDK 实机取流、ROS2 colcon 与 launch、真实运动目标和实际执行机构闭环。因此这些单元测试不表示已通过任务书的现场验收。相机内外参模板保持未标定，必须填入实测数据后才能启动。
 
 ## 2026-09-19：控制编译文本与弹道候选选择修复
 

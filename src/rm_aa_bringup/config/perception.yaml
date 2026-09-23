@@ -3,7 +3,7 @@ perception:
     opencv_threads: 2
     # 图像源
     source:
-      mode: video # 模式：video/camera/topic/synthetic
+      mode: video # 模式：video/camera/topic
       device: "0" # 如果指定了海康相机序列号，序列号优先 
       camera_backend: hikrobot # 只在 mode: camera 时使用。模式：uvc/hikrobot。hikrobot 模式使用海康相机 SDK，uvc 模式使用 OpenCV VideoCapture。
       # Nonempty serial overrides the SDK enumeration index in device.

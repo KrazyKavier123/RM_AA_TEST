@@ -32,6 +32,5 @@ private:
   cv::VideoCapture capture_;
   std::vector<std::string> videos_;
   size_t video_index_{0};
-  std::uint64_t synthetic_index_{0};
 };
 }

@@ -82,7 +82,7 @@ target = Rz(yaw) * Ry(-pitch) * (offset + distance * [1,0,0])
 
 模型要求 yaw/pitch 两轴相交于基座原点，零位光轴朝 +X，相机没有额外安装旋转。无有效前向解时报告 `planning_unavailable`。
 
-此参数只用于规划，不发布或修改 TF。外部相机 TF 必须使用同一标定，观测仍按采集时间通过 TF 转换。如果 TF 父系为俯仰架（前/左/上），相机 optical 子系平移应为 `[-vector_z, vector_x, vector_y]`，其中 vector 是上述 optical 坐标系下以米为单位的参数。`mock_gimbal` 仍是零偏移接口演示，非零标定需同步修改其 TF 才能用于几何验证。
+此参数只用于规划，不发布或修改 TF。外部相机 TF 必须使用同一标定，观测仍按采集时间通过 TF 转换。如果 TF 父系为俯仰架（前/左/上），相机 optical 子系平移应为 `[-vector_z, vector_x, vector_y]`，其中 vector 是上述 optical 坐标系下以米为单位的参数。非零标定必须与外部 TF 保持一致。
 
 ## 构建和启动
 
@@ -95,21 +95,12 @@ colcon build --packages-up-to rm_aa_bringup --cmake-args -DCMAKE_BUILD_TYPE=Rele
 source install/setup.bash
 colcon test --packages-select rm_aa_control --event-handlers console_direct+
 colcon test-result --verbose
-python3 tools/smoke_control.py --video /absolute/path/videos  # 录制视频到控制话题的集成冒烟检查
 
 # 视觉已运行时，只启动控制节点；先在 src/rm_aa_bringup/config/control.yaml 中设置实物参数和话题
 ros2 launch rm_aa_bringup control.launch.py
 
 # 同时启动现有视觉和控制（source/config/device/video/web 参数沿用视觉 launch）
 ros2 launch rm_aa_bringup tracking.launch.py source:=topic
-
-# 本地视频 + 静态坐标变换 + 零位反馈，仅验证接口
-ros2 launch rm_aa_bringup tracking.launch.py source:=video video:=/absolute/path/videos mock_gimbal:=true
-ros2 topic echo /control/status
-ros2 topic echo /gimbal/trajectory --once
-```
-
-`mock_gimbal` 默认关闭；示例不跟随输出指令，因此不是完整闭环仿真。录制视频的重演也不是严格的多板转动车体渲染，算法闭环行为由独立单元测试验证。
 
 核心算法可脱离 ROS2 测试（需要 Eigen3、GoogleTest、CMake、C++17 编译器）：
 
@@ -121,4 +112,4 @@ ctest --test-dir build/control-core -C Release --output-on-failure
 
 测试覆盖运动和转动的小车估计、可见板切换、异常/乱序/丢帧、最近板与滞回、角度跨界、MPC 动力学与加速度界限、反馈闭环收敛、求解失败。
 
-2026-09-14 本地验证：Windows MSVC 19.50、Eigen 3.4.0、GoogleTest 1.15.2，Release 核心编译成功，8/8 C++ 测试通过（日志 `RM_AA/output/control_ctest.log`）；工作区静态检查及现有6项 Web 测试通过。本机没有可用的 ROS2 安装，因此尚未执行 ROS2 节点构建、`smoke_control.py` 和实物联调；以上结果不代表这些检查已通过。
+2026-09-14 本地验证：Windows MSVC 19.50、Eigen 3.4.0、GoogleTest 1.15.2，Release 核心编译成功，8/8 C++ 测试通过（日志 `RM_AA/output/control_ctest.log`）。本机当时没有可用的 ROS2 安装，因此尚未执行 ROS2 节点构建和实物联调；以上结果不代表这些检查已通过。

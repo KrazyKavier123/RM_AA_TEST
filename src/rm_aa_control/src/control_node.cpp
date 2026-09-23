@@ -8,14 +8,17 @@
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
-#include <std_msgs/msg/float64.hpp>
+#include <rm_aa_hardware/msg/target_command.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <tf2_ros/buffer.h>
+#include <tf2/exceptions.h>
+#include <tf2/time.h>
 #include <tf2_ros/transform_listener.h>
 #include <Eigen/Geometry>
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <stdexcept>
 
@@ -44,6 +47,10 @@ public:
       pitch_to_barrel[0], pitch_to_barrel[1], pitch_to_barrel[2]);
     bullet_speed_ = positive("ballistics.bullet_speed_mps", 22.0);
     gravity_ = positive("ballistics.gravity_mps2", 9.7833);
+    target_id_ = declare_parameter<int>("target_id", 1);
+    if (target_id_ < 1 || target_id_ > 255) throw std::invalid_argument("target_id must be 1..255");
+    fire_settle_ = positive("fire.settle_s", 0.3);
+    fire_tolerance_ = positive("fire.tolerance_rad", 0.01);
     yaw_joint_ = declare_parameter<std::string>("yaw_joint", "gimbal_yaw_joint");
     pitch_joint_ = declare_parameter<std::string>("pitch_joint", "gimbal_pitch_joint");
     roll_joint_ = declare_parameter<std::string>("roll_joint", "gimbal_roll_joint");
@@ -93,6 +100,7 @@ public:
     state_ = create_publisher<nav_msgs::msg::Odometry>("target/state", 1);
     plate_ = create_publisher<geometry_msgs::msg::PointStamped>("target/selected_plate", 1);
     status_ = create_publisher<std_msgs::msg::String>("control/status", 1);
+    target_command_ = create_publisher<rm_aa_hardware::msg::TargetCommand>("gimbal/target_command", 1);
     parameters_ = add_on_set_parameters_callback([](const std::vector<rclcpp::Parameter> & ps) {
       rcl_interfaces::msg::SetParametersResult r; r.successful = true;
       for (const auto & p : ps) if (p.get_name() != "use_sim_time") {
@@ -111,7 +119,14 @@ private:
   Eigen::Isometry3d transform(const std::string & to, const std::string & from, const rclcpp::Time & time) {
     if (from.empty()) throw std::runtime_error("Empty observation frame");
     if (to == from) return Eigen::Isometry3d::Identity();
-    const auto t = buffer_.lookupTransform(to, from, time).transform;
+    geometry_msgs::msg::TransformStamped stamped;
+    try {
+      stamped = buffer_.lookupTransform(to, from, time);
+    } catch (const tf2::TransformException &) {
+      // 观测时间戳通常比最新一帧电控反馈还新，tf2 拒绝向未来外推；退回最新可用变换。
+      stamped = buffer_.lookupTransform(to, from, tf2::TimePointZero);
+    }
+    const auto t = stamped.transform;
     Eigen::Quaterniond q(t.rotation.w, t.rotation.x, t.rotation.y, t.rotation.z);
     if (!q.coeffs().allFinite() || q.norm() < 1e-6) throw std::runtime_error("Invalid TF quaternion");
     Eigen::Isometry3d result = Eigen::Isometry3d::Identity();
@@ -137,7 +152,8 @@ private:
         if (inward.head<2>().norm() < 0.2) continue;
         observations.push_back({world_from_observation * position, std::atan2(inward.y(), inward.x())});
       }
-      tracker_->update(observations, stamp.seconds(), world_from_camera.translation());
+      if (tracker_->update(observations, stamp.seconds(), world_from_camera.translation()))
+        obs_stamp_ = stamp.seconds();
     } catch (const std::exception & e) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "Observation TF unavailable: %s", e.what());
     }
@@ -177,7 +193,8 @@ private:
     }
     if (t == last_tick_) return;
     last_tick_ = t;
-    if (!tracker_->valid(t)) { publish_status("waiting_for_target"); return; }
+    if (!tracker_->valid(t)) { tracking_ = false; publish_status("waiting_for_target"); return; }
+    if (!tracking_) { tracking_ = true; tracking_since_ = t; }
     if (feedback_stamp_ < 0 || t < feedback_stamp_ || t - feedback_stamp_ > timeout_) {
       publish_status("waiting_for_feedback"); return;
     }
@@ -238,6 +255,10 @@ private:
       }
       const auto y = yaw_mpc_->solve(yaw, yaw_ref), p = pitch_mpc_->solve(pitch, pitch_ref);
       if (!y.converged || !p.converged) { publish_status("mpc_not_converged"); return; }
+      // 稳定：跟踪持续够久且观测未超时。开火：稳定且当前角度已经对准瞄准角。
+      const bool stable = t - tracking_since_ >= fire_settle_ && t - obs_stamp_ <= age_limit_;
+      const bool aimed = std::abs(wrap(yaw_ref[0][0] - yaw[0])) <= fire_tolerance_ &&
+        std::abs(pitch_ref[0][0] - pitch[0]) <= fire_tolerance_;
       trajectory_msgs::msg::JointTrajectory command;
       command.header.stamp = time; command.header.frame_id = base_frame_;
       command.joint_names = {yaw_joint_, pitch_joint_};
@@ -256,6 +277,18 @@ private:
       selected.point.x = target.x(); selected.point.y = target.y(); selected.point.z = target.z();
       plate_->publish(selected);
       const auto x = tracker_->state_at(t);
+      // 下位机目标指令：角度、编号、距离、车体中心与稳定/开火判定
+      rm_aa_hardware::msg::TargetCommand cmd;
+      cmd.header.stamp = time; cmd.header.frame_id = base_frame_;
+      cmd.target_id = static_cast<std::uint8_t>(target_id_);
+      cmd.tracking_state = stable ? 1 : 2;
+      cmd.target_yaw = yaw_ref[0][0]; cmd.target_pitch = pitch_ref[0][0];
+      cmd.yaw_velocity = yaw_ref[0][1]; cmd.pitch_velocity = pitch_ref[0][1];
+      cmd.distance_m = (target - world_from_camera.translation()).norm();
+      cmd.center_x_m = x[0]; cmd.center_y_m = x[2];
+      cmd.processing_latency_ms = (t - obs_stamp_) * 1000.0;
+      cmd.fire_allowed = stable && aimed;
+      target_command_->publish(cmd);
       nav_msgs::msg::Odometry estimate;
       estimate.header = selected.header;
       // Both centre pose and velocity are expressed in fixed_frame (no child TF is broadcast).
@@ -287,6 +320,9 @@ private:
   int64_t feedback_stamp_ns_{0};
   double timeout_{}, age_limit_{}, normal_sign_{}, feedback_stamp_{-1}, last_tick_{-1};
   double camera_offset_tolerance_{}, bullet_speed_{22.0}, gravity_{9.7833};
+  double fire_settle_{}, fire_tolerance_{}, obs_stamp_{-1}, tracking_since_{};
+  int target_id_{1};
+  bool tracking_{false};
   Eigen::Vector2d yaw_{Eigen::Vector2d::Zero()}, pitch_{Eigen::Vector2d::Zero()};
   Eigen::Vector3d pitch_to_camera_{Eigen::Vector3d::Zero()},
     pitch_to_barrel_{0.0741, 0.0, 0.0};
@@ -297,7 +333,7 @@ private:
   tf2_ros::TransformListener listener_;
   rclcpp::Subscription<geometry_msgs::msg::PoseArray>::SharedPtr observations_;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr feedback_;
-  rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr bullet_speed_subscription_;
+  rclcpp::Publisher<rm_aa_hardware::msg::TargetCommand>::SharedPtr target_command_;
   rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr trajectory_;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr state_;
   rclcpp::Publisher<geometry_msgs::msg::PointStamped>::SharedPtr plate_;

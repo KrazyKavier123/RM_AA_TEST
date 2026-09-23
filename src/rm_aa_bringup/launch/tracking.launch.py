@@ -10,10 +10,9 @@ from launch_ros.actions import Node
 
 def validate_hardware_mode(context):
     enabled = LaunchConfiguration('hardware').perform(context).lower() in ('true', '1')
-    mocked = LaunchConfiguration('mock_gimbal').perform(context).lower() in ('true', '1')
     simulated = LaunchConfiguration('use_sim_time').perform(context).lower() in ('true', '1')
-    if enabled and (mocked or simulated):
-        raise RuntimeError('hardware requires mock_gimbal:=false and use_sim_time:=false')
+    if enabled and simulated:
+        raise RuntimeError('hardware requires use_sim_time:=false')
     return []
 
 
@@ -24,13 +23,9 @@ def generate_launch_description():
         DeclareLaunchArgument('hardware', default_value='false'),
         DeclareLaunchArgument('hardware_config', default_value=str(bringup / 'config/hardware.yaml')),
         DeclareLaunchArgument('use_sim_time', default_value='false'),
-        DeclareLaunchArgument('mock_gimbal', default_value='false',
-                             description='Fixed camera TF and zero joint feedback for interface demo only'),
         OpaqueFunction(function=validate_hardware_mode),
         IncludeLaunchDescription(PythonLaunchDescriptionSource(str(bringup / 'launch/perception.launch.py'))),
         IncludeLaunchDescription(PythonLaunchDescriptionSource(str(bringup / 'launch/control.launch.py'))),
-        Node(package='rm_aa_control', executable='mock_gimbal.py', output='screen',
-             condition=IfCondition(LaunchConfiguration('mock_gimbal'))),
         IncludeLaunchDescription(PythonLaunchDescriptionSource(str(hardware / 'launch/hardware.launch.py')),
                                  condition=IfCondition(LaunchConfiguration('hardware')),
                                  launch_arguments={'hardware_config': LaunchConfiguration('hardware_config')}.items()),
