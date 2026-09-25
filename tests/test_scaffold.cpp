@@ -1,8 +1,10 @@
 #include "AppSupport.hpp"
+#include "Mpc.hpp"
 
 #include <cassert>
 #include <cmath>
 #include <limits>
+#include <vector>
 
 int main() {
     static_assert(sizeof(Translator) == 64, "The serial message layout must remain unchanged");
@@ -89,6 +91,19 @@ int main() {
     assert(!isAutoAimStatus(1U));
     assert(enemyColorFromStatus(0U) == TeamColor::Blue);
     assert(enemyColorFromStatus(5U) == TeamColor::Red);
+
+    // MPC：投影梯度必须守住角加速度上限，并把状态推向参考角。
+    rmv::MpcConfig mpc_cfg;
+    mpc_cfg.steps = 25;
+    mpc_cfg.max_acc = 6.0;
+    rmv::AxisMpc axis(mpc_cfg);
+    std::vector<Eigen::Vector2d> reference;
+    for (int k = 0; k < mpc_cfg.steps; ++k) reference.emplace_back(0.2, 0.0);
+    const rmv::MpcPlan plan = axis.solve({0.0, 0.0}, reference);
+    assert(plan.converged);
+    assert(plan.states.size() == static_cast<std::size_t>(mpc_cfg.steps));
+    assert(plan.accs.cwiseAbs().maxCoeff() <= mpc_cfg.max_acc + 1e-9);
+    assert(plan.states.back()[0] > 0.1);
 
     MessData_AutoAim controller_message{};
     controller_message.yaw = 0.1F;

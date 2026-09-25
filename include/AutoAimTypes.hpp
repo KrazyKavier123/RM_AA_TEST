@@ -85,6 +85,7 @@ struct PredictionResult {
     float target_yaw_velocity{0.0F};
     float target_pitch_velocity{0.0F};
     bool fire_allowed{false};
+    bool mpc_ok{false};  // 本帧 MPC 是否收敛；未收敛时按无目标输出
 };
 
 // 读取 OpenCV YAML，将矩阵统一为 CV_64F，并拒绝占位数据或几何上无效的标定结果。

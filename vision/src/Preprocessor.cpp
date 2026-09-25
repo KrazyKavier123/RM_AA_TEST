@@ -1,0 +1,19 @@
+#include "Preprocessor.hpp"
+
+#include <opencv2/imgproc.hpp>
+
+namespace rmv {
+
+cv::Mat Preprocessor::run(const cv::Mat& bgr) const {
+    cv::Mat gray, mask;
+    cv::cvtColor(bgr, gray, cv::COLOR_BGR2GRAY);
+    cv::threshold(gray, mask, cfg_.threshold, 255, cv::THRESH_BINARY);
+    if (cfg_.open_radius > 0) {
+        const int k = 2 * cfg_.open_radius + 1;
+        cv::morphologyEx(mask, mask, cv::MORPH_OPEN,
+                         cv::getStructuringElement(cv::MORPH_ELLIPSE, {k, k}));
+    }
+    return mask;
+}
+
+}  // namespace rmv

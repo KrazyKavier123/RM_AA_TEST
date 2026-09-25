@@ -155,8 +155,15 @@ void logPrediction(const PredictionResult& result) {
     WEB_LOG("target_found", result.state == TrackingState::NoTarget ? 0.0 : 1.0);
     WEB_LOG("ekf_state", static_cast<double>(result.state));
     if (result.state == TrackingState::NoTarget) {
+        // 无目标时把 EKF 曲线归零，网页上仍能看到状态切换。
+        WEB_LOG("mpc_ok", 0.0);
+        for (const char* key : {"target_id", "target_distance", "ekf_x_m", "ekf_y_m",
+                                "ekf_vx_m_s", "ekf_vy_m_s", "ekf_yaw_rad",
+                                "ekf_yaw_rate_rad_s", "ekf_radius_1_m", "ekf_radius_2_m"})
+            WEB_LOG(key, 0.0);
         return;
     }
+    WEB_LOG("mpc_ok", result.mpc_ok ? 1.0 : 0.0);
     WEB_LOG("target_id", result.target_id);
     WEB_LOG("target_yaw", result.target_yaw);
     WEB_LOG("target_pitch", result.target_pitch);
@@ -421,16 +428,27 @@ void *OperationFunction(void *arg) {
                  first_detection.corners[2] + first_detection.corners[3]) * 0.25F;
             WEB_LOG("target_x_px", center.x);
             WEB_LOG("target_y_px", center.y);
+        } else {
+            WEB_LOG("detection_id", 0.0);
+            WEB_LOG("detection_confidence", 0.0);
         }
 
         // 2. PnP 位姿解算。PnP 失败时同样保留空 observations，交给 EKF 做纯预测。
         const std::vector<ArmorPose> observations =
             armor_solve(detections, camera, gimbal);
         if (!observations.empty()) {
+            // PnP 结果统一在云台系：距离、方位 yaw/pitch 与重投影误差。
+            const cv::Vec3d& p = observations.front().position_gimbal_m;
             WEB_LOG("pnp_reprojection_error", observations.front().reprojection_error);
-            WEB_LOG("pnp_distance_m", cv::norm(observations.front().position_gimbal_m));
+            WEB_LOG("pnp_distance_m", cv::norm(p));
+            WEB_LOG("pnp_yaw", std::atan2(p[1], p[0]));
+            WEB_LOG("pnp_pitch", std::atan2(p[2], std::hypot(p[0], p[1])));
         } else {
+            // 无有效观测时用哨兵值保持曲线连续。
             WEB_LOG("pnp_reprojection_error", -1.0);
+            WEB_LOG("pnp_distance_m", -1.0);
+            WEB_LOG("pnp_yaw", 0.0);
+            WEB_LOG("pnp_pitch", 0.0);
         }
 
         // 3. 计算帧间隔和通信延迟，再调用 EKF。即使 observations 为空也必须调用。
