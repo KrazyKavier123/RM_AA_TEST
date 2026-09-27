@@ -228,7 +228,18 @@ int main(int argc, char** argv) {
         const TeamColor color = argc == 4 && std::string(argv[3]) == "red"
                                     ? TeamColor::Red : TeamColor::Blue;
         rmv::View view;
-        while (!shutdown_requested.load(std::memory_order_relaxed) && get_pic(pic)) {
+        bool have_frame = false;
+        while (!shutdown_requested.load(std::memory_order_relaxed)) {
+            if (!get_pic(pic) || pic.empty()) {
+                if (!have_frame) {
+                    std::cerr << "[view] 未取得首帧，无法显示画面。请检查上方取流错误；"
+                              << "输入配置位于 student/src/StudentTasks.cpp。\n";
+                    return EXIT_FAILURE;
+                }
+                std::cout << "[view] 输入结束或取流中断，退出预览\n";
+                break;
+            }
+            have_frame = true;
             const auto dets = armor_detect(pic, color);
             const auto poses = armor_solve(dets, camera, {});
             if (!view.show(pic, dets, poses, camera)) break;

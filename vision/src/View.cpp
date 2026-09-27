@@ -45,8 +45,9 @@ bool View::show(const cv::Mat& frame, const std::vector<ArmorDetection>& dets,
                 {255, 255, 255}, cfg_.thickness, cv::LINE_AA);
     cv::imshow("RMV", image);
     const int key = cv::waitKey(1) & 0xff;
+    // GTK 不支持 VISIBLE，返回 -1；AUTOSIZE 在窗口存在时为 0 或 1。
     return key != 27 && key != 'q' && key != 'Q' &&
-           cv::getWindowProperty("RMV", cv::WND_PROP_VISIBLE) >= 1;
+           cv::getWindowProperty("RMV", cv::WND_PROP_AUTOSIZE) >= 0;
 }
 
 }  // namespace rmv
