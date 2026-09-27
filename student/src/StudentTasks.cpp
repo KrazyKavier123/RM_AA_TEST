@@ -22,7 +22,7 @@ namespace {
 // 相机内参、畸变和相机->云台外参仍由 config/camera.yaml 提供。
 
 // 取流："camera" 接真实相机，"video" 读视频文件或目录。
-const std::string kMode = "video";
+const std::string kMode = "camera";                             
 const std::string kBackend = "hikrobot";        // camera 模式："hikrobot"（MVS SDK）或 "uvc"（OpenCV）
 const std::string kDevice = "0";                // uvc：设备号或 /dev/videoX；hikrobot：枚举序号
 const std::string kSerial = "";                 // 非空时按海康序列号选相机，例如 "DA0823281"

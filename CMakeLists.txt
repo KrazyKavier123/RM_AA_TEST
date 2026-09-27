@@ -18,7 +18,7 @@ option(ENABLE_HIKROBOT "Use the Hikrobot MVS SDK for camera capture" ${_hikrobot
 option(BUILD_TESTING "Build the starter-project tests" ON)
 
 find_package(Eigen3 REQUIRED)
-find_package(OpenCV 4 REQUIRED COMPONENTS core imgproc videoio calib3d dnn)
+find_package(OpenCV 4 REQUIRED COMPONENTS core imgproc videoio calib3d dnn highgui)
 find_package(Threads REQUIRED)
 
 add_subdirectory(serialPort)
@@ -33,6 +33,7 @@ add_library(vision STATIC
     vision/src/Detector.cpp
     vision/src/Classifier.cpp
     vision/src/PoseSolver.cpp
+    vision/src/View.cpp
 )
 target_include_directories(vision PUBLIC vision/include include ${OpenCV_INCLUDE_DIRS})
 target_link_libraries(vision PUBLIC ${OpenCV_LIBS})

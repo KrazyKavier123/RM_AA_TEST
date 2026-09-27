@@ -53,6 +53,7 @@ struct ArmorDetection {
     ArmorSize size{ArmorSize::Small};
     int target_id{0};       // 0 保留给未知目标/无目标。
     float confidence{0.0F}; // 分类器置信度，范围为 [0, 1]。
+    std::string label{"unknown"}; // 模型原始类别；低置信度仍保留供画面调试。
 };
 
 struct ArmorPose {
@@ -60,6 +61,7 @@ struct ArmorPose {
     // reprojection_error 是单个观测的重投影误差（像素）。
     ArmorDetection detection;
     cv::Vec3d position_camera_m{0.0, 0.0, 0.0};
+    cv::Vec3d rvec{0.0, 0.0, 0.0}; // 装甲板到相机的 Rodrigues 旋转向量。
     cv::Vec3d position_gimbal_m{0.0, 0.0, 0.0};
     double armor_yaw{0.0};
     double reprojection_error{0.0};

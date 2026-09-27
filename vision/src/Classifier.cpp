@@ -52,6 +52,7 @@ void Classifier::classify(const cv::Mat& bgr, ArmorDetection& det) {
     cv::minMaxLoc(prob, nullptr, &confidence, nullptr, &index);
 
     const std::string& label = labels_.at(index.x);
+    det.label = label;
     det.confidence = static_cast<float>(confidence);
     det.target_id = 0;
     if (confidence >= threshold_ && label.size() == 1 && label[0] >= '1' && label[0] <= '5')

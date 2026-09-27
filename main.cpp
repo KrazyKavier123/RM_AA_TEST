@@ -2,6 +2,7 @@
 #include "SerialPort.hpp"
 #include "StudentTasks.hpp"
 #include "WebLogger.hpp"
+#include "View.hpp"
 
 #include <array>
 #include <atomic>
@@ -20,7 +21,7 @@
 #include <vector>
 
 // 这个文件有意保留 aimbot_26/main.cpp 的组织方式：
-// main 负责初始化，ReadFunction 负责收串口，OperationFunction 负责整条视觉流水线。
+// main 负责初始化和窗口线程，ReadFunction 收串口，OperationFunction 执行视觉流水线。
 // 学生只需要替换 student/src/StudentTasks.cpp 中的四个任务函数。
 
 namespace {
@@ -64,7 +65,9 @@ void printUsage(const char* program) {
     std::cout << "用法: " << program
               << " <串口设备> <波特率> <相机标定文件> [Web端口]\n"
               << "示例: " << program
-              << " /dev/ttyACM0 115200 config/camera.yaml 8080\n";
+              << " /dev/ttyACM0 115200 config/camera.yaml 8080\n"
+              << "画面预览（无需串口）: " << program
+              << " --view config/camera.yaml [red|blue]\n";
 }
 
 bool parsePositiveInt(const char* text, int& value) {
@@ -203,12 +206,35 @@ int readInitialFrame(SerialPort& serialPort, Translator& frame) {
 
 // 串口读线程：只负责读取完整帧并更新共享的 temp。
 void *ReadFunction(void *arg);
-// 操作线程：按照“复制 -> 取流 -> 检测 -> PnP -> EKF -> 写回”的顺序处理。
+// 主线程视觉循环：按照“复制 -> 取流 -> 检测 -> PnP -> EKF -> 写回”的顺序处理。
 void *OperationFunction(void *arg);
 
 int main(int argc, char** argv) {
     std::signal(SIGINT, request_shutdown);
     std::signal(SIGTERM, request_shutdown);
+
+    // 预览只处理实际输入，不构造控制器帧，也不发送控制指令。
+    if (argc >= 2 && std::string(argv[1]) == "--view") {
+        if (argc < 3 || argc > 4 ||
+            (argc == 4 && std::string(argv[3]) != "red" && std::string(argv[3]) != "blue")) {
+            printUsage(argv[0]);
+            return EXIT_FAILURE;
+        }
+        std::string error;
+        if (!loadCameraParameters(argv[2], camera, error)) {
+            std::cerr << error << '\n';
+            return EXIT_FAILURE;
+        }
+        const TeamColor color = argc == 4 && std::string(argv[3]) == "red"
+                                    ? TeamColor::Red : TeamColor::Blue;
+        rmv::View view;
+        while (!shutdown_requested.load(std::memory_order_relaxed) && get_pic(pic)) {
+            const auto dets = armor_detect(pic, color);
+            const auto poses = armor_solve(dets, camera, {});
+            if (!view.show(pic, dets, poses, camera)) break;
+        }
+        return EXIT_SUCCESS;
+    }
 
     Options options;
     if (!parseOptions(argc, argv, options)) {
@@ -252,27 +278,19 @@ int main(int argc, char** argv) {
     }
 
     pthread_t readThread{};
-    pthread_t operationThread{};
     bool read_started = false;
     bool operation_started = false;
 
-    // 保留参考工程的 pthread 双线程结构：先创建读线程，再创建操作线程。
+    // 串口接收独立运行，视觉与窗口留在主线程。
     if (pthread_create(&readThread, nullptr, ReadFunction, serialPort) == 0) {
         read_started = true;
     } else {
         std::cerr << "创建串口读线程失败\n";
     }
-    if (read_started &&
-        pthread_create(&operationThread, nullptr, OperationFunction, serialPort) == 0) {
+    // HighGUI 在主线程处理窗口事件，串口接收仍独立运行。
+    if (read_started) {
         operation_started = true;
-    } else {
-        std::cerr << "创建视觉操作线程失败\n";
-        shutdown_requested.store(true, std::memory_order_relaxed);
-    }
-
-    // 先等待操作线程结束，再通知读线程退出，和原 main 的生命周期一致。
-    if (operation_started) {
-        pthread_join(operationThread, nullptr);
+        OperationFunction(serialPort);
     }
     shutdown_requested.store(true, std::memory_order_relaxed);
     if (read_started) {
@@ -346,6 +364,7 @@ void *OperationFunction(void *arg) {
     // Web 服务和相机 SDK 都属于操作线程的资源，生命周期与原工程一致。
     START_WEB_SERVER(web_port);
 
+    rmv::View view;
     double dt = 0.0;
     double last_time_stamp = 0.0;
     auto last_frame_time = std::chrono::steady_clock::time_point{};
@@ -376,7 +395,6 @@ void *OperationFunction(void *arg) {
         // 对应参考工程中的 camera.get_pic(&pic, ...)。具体 SDK 初始化和取流由学生完成。
         pic.release();
         const bool got_pic = get_pic(pic);
-        bool using_fallback_frame = false;
         if (!got_pic || pic.empty()) {
             ++empty_frame_count;
             WEB_LOG("empty_frame", static_cast<double>(empty_frame_count));
@@ -392,17 +410,12 @@ void *OperationFunction(void *arg) {
                 shutdown_requested.store(true, std::memory_order_relaxed);
                 break;
             }
-            // 临时补一张黑帧，使后面的检测、PnP 和 EKF 阶段仍按原顺序执行。
-            // 该帧不是相机观测，最终输出会被强制设为无目标。
-            pic = cv::Mat(camera.image_height, camera.image_width, CV_8UC3,
-                          cv::Scalar(0, 0, 0));
-            using_fallback_frame = true;
-        } else {
-            empty_frame_count = 0;
+            setSafeOutput(translator);
+            writeFrame(*serialPort, translator);
+            continue;
         }
-        if (!using_fallback_frame) {
-            WEB_LOG("empty_frame", 0.0);
-        }
+        empty_frame_count = 0;
+        WEB_LOG("empty_frame", 0.0);
 
         const auto frame_time = std::chrono::steady_clock::now();
         if (last_frame_time.time_since_epoch().count() != 0) {
@@ -451,6 +464,13 @@ void *OperationFunction(void *arg) {
             WEB_LOG("pnp_pitch", 0.0);
         }
 
+        if (!view.show(pic, detections, observations, camera)) {
+            setSafeOutput(translator);
+            writeFrame(*serialPort, translator);
+            shutdown_requested.store(true, std::memory_order_relaxed);
+            break;
+        }
+
         // 3. 计算帧间隔和通信延迟，再调用 EKF。即使 observations 为空也必须调用。
         const double time_stamp =
             std::chrono::duration<double>(frame_time.time_since_epoch()).count();
@@ -467,7 +487,7 @@ void *OperationFunction(void *arg) {
         bool prediction_valid = applyPrediction(translator, prediction);
 
         // 学生算法耗时过长时，丢弃本次结果，避免旧控制器数据触发动作。
-        if (using_fallback_frame || !frameIsFresh(received_at)) {
+        if (!frameIsFresh(received_at)) {
             setSafeOutput(translator);
             prediction_valid = false;
         }

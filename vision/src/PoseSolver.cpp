@@ -67,6 +67,7 @@ std::vector<ArmorPose> PoseSolver::solve(const std::vector<ArmorDetection>& dets
             best_error = error;
             best.detection = det;
             best.position_camera_m = t;
+            best.rvec = r;
             best.reprojection_error = error;
             best.armor_yaw = normal_sign_ *
                              std::atan2(n_gimbal.at<double>(1), n_gimbal.at<double>(0));
