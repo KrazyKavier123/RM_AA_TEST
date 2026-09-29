@@ -22,6 +22,8 @@ bool View::show(const cv::Mat& frame, const std::vector<ArmorDetection>& dets,
     }
 
     cv::Mat image = frame.clone();
+
+    cv::rotate(image, image, cv::ROTATE_180);
     for (const auto& det : dets) {
         const cv::Scalar color = det.target_id > 0 ? cv::Scalar(0, 255, 0)
                                                   : cv::Scalar(0, 180, 255);
@@ -47,7 +49,7 @@ bool View::show(const cv::Mat& frame, const std::vector<ArmorDetection>& dets,
     const int key = cv::waitKey(1) & 0xff;
     // GTK 不支持 VISIBLE，返回 -1；AUTOSIZE 在窗口存在时为 0 或 1。
     return key != 27 && key != 'q' && key != 'Q' &&
-           cv::getWindowProperty("RMV", cv::WND_PROP_AUTOSIZE) >= 0;
+           cv::getWindowProperty("RMV", cv::WND_PROP_AUTOSIZE) >= 0; // 原先是 >= 1
 }
 
 }  // namespace rmv

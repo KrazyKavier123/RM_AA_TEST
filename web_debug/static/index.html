@@ -254,6 +254,105 @@
             .btn { flex: 1; padding: 0 8px; }
             .chart-wrap { height: 220px; }
         }
+        .link-panel {
+            margin-bottom: 12px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: var(--surface);
+            overflow: hidden;
+        }
+
+        .link-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .link-title { font-size: 14px; font-weight: 700; color: var(--text); }
+        .link-sub { margin-top: 2px; color: var(--muted); font-size: 11px; }
+
+        .link-state {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 4px 10px;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            color: var(--muted);
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .link-state::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--warning);
+        }
+
+        .link-state.ok { color: var(--accent); border-color: #367c72; background: var(--accent-soft); }
+        .link-state.ok::before { background: var(--accent); }
+        .link-state.bad { color: var(--danger); border-color: #5b2f2c; }
+        .link-state.bad::before { background: var(--danger); }
+
+        .link-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--line);
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .link-meta b {
+            color: var(--text);
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .frame-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 1px;
+            background: var(--line);
+        }
+
+        .frame-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            min-width: 0;
+            padding: 8px 12px;
+            background: var(--surface);
+        }
+
+        .frame-label {
+            overflow: hidden;
+            color: var(--muted);
+            font-size: 11px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .frame-value {
+            color: var(--text);
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+            font-size: 14px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .frame-caption {
+            padding: 8px 12px;
+            color: var(--muted);
+            font-size: 11px;
+            border-top: 1px solid var(--line);
+        }
+
     </style>
 </head>
 <body>
@@ -289,6 +388,21 @@
     </header>
 
     <main>
+        <section class="link-panel">
+            <div class="link-head">
+                <div>
+                    <div class="link-title">上下位机通信</div>
+                    <div class="link-sub">当前写回电控的 64 字节帧</div>
+                </div>
+                <div id="linkState" class="link-state">等待数据</div>
+            </div>
+            <div class="link-meta">
+                <span>收帧数 <b id="linkRxFrames">-</b></span>
+                <span>最近帧龄 <b id="linkRxAge">-</b> ms</span>
+            </div>
+            <div class="frame-grid" id="frameGrid"></div>
+            <div class="frame-caption">字段顺序与线协议一致（yaw 到 crc）。持续更新且显示“通信正常”即表明上下位机通信正常。</div>
+        </section>
         <section id="charts" aria-live="polite"></section>
     </main>
 
@@ -298,6 +412,10 @@
 
             const MAX_HISTORY_POINTS = 5000;
             const chartsRoot = document.getElementById("charts");
+            const linkState = document.getElementById("linkState");
+            const linkRxFrames = document.getElementById("linkRxFrames");
+            const linkRxAge = document.getElementById("linkRxAge");
+            const frameGrid = document.getElementById("frameGrid");
             const connection = document.getElementById("connection");
             const connectionText = document.getElementById("connectionText");
             const pauseButton = document.getElementById("pauseButton");
@@ -320,7 +438,7 @@
 
             function updateEmptyState() {
                 const existing = document.getElementById("emptyState");
-                if (charts.size > 0) {
+                if (charts.size > 0 || telemetrySeen) {
                     if (existing) existing.remove();
                     return;
                 }
@@ -352,6 +470,60 @@
                     return value.toExponential(3);
                 }
                 return value.toFixed(3).replace(/\.0+$|(\.\d*?)0+$/, "$1");
+            }
+
+            // 网页要展示的"当前发信帧"字段，顺序与线协议一致（yaw 到 crc）。
+            const FRAME_FIELDS = [
+                ["frame.yaw", "yaw"], ["frame.pitch", "pitch"], ["frame.roll", "roll"],
+                ["frame.status", "status"], ["frame.is_far", "is_far"],
+                ["frame.armor_flag", "armor_flag"], ["frame.latency", "latency"],
+                ["frame.bias", "bias"], ["frame.distance", "distance"],
+                ["frame.pitch_offset", "pitch_offset"], ["frame.coo_x", "coo_x"],
+                ["frame.coo_y", "coo_y"], ["frame.wheel_w", "wheel_w"],
+                ["frame.fire_allowance", "fire_allowance"],
+                ["frame.target_yaw", "target_yaw"], ["frame.target_pitch", "target_pitch"],
+                ["frame.yaw_vel", "yaw_vel"], ["frame.pitch_vel", "pitch_vel"],
+                ["frame.crc", "crc"],
+            ];
+            const frameValues = new Map();
+            let telemetrySeen = false;
+            for (const [key, label] of FRAME_FIELDS) {
+                const cell = document.createElement("div");
+                cell.className = "frame-cell";
+                const name = document.createElement("div");
+                name.className = "frame-label";
+                name.textContent = label;
+                const value = document.createElement("div");
+                value.className = "frame-value";
+                value.textContent = "-";
+                cell.append(name, value);
+                frameGrid.appendChild(cell);
+                frameValues.set(key, value);
+            }
+
+            function setLinkState(state, label) {
+                linkState.className = `link-state ${state}`;
+                linkState.textContent = label;
+            }
+
+            // 处理链路健康与发信帧字段：只更新面板，不生成曲线。
+            function applyTelemetryPoint(key, value) {
+                telemetrySeen = true;
+                if (key === "link.rx_frames") {
+                    linkRxFrames.textContent = String(Math.trunc(value));
+                    return;
+                }
+                if (key === "link.rx_age_ms") {
+                    linkRxAge.textContent = value < 0 ? "未收到" : formatValue(value);
+                    return;
+                }
+                if (key === "link.rx_ok") {
+                    setLinkState(value >= 0.5 ? "ok" : "bad",
+                        value >= 0.5 ? "通信正常" : "通信超时");
+                    return;
+                }
+                const cell = frameValues.get(key);
+                if (cell) cell.textContent = formatValue(value);
             }
 
             function makeChart(key) {
@@ -422,6 +594,11 @@
                 const numericValue = Number(point.v);
                 const timestamp = Number(point.t);
                 if (!Number.isFinite(numericValue) || !Number.isFinite(timestamp)) return;
+
+                if (point.k.startsWith("frame.") || point.k.startsWith("link.")) {
+                    applyTelemetryPoint(point.k, numericValue);
+                    return;
+                }
 
                 const chart = charts.get(point.k) || makeChart(point.k);
                 // 限制浏览器历史记录的长度，避免暂停或长时间运行时无限增长。

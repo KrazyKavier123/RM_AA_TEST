@@ -10,6 +10,7 @@
 #include <cmath>
 #include <csignal>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
@@ -48,6 +49,13 @@ cv::Mat pic;           // 操作线程当前取得的图像
 std::mutex message_mutex;
 bool message_available = false;
 std::chrono::steady_clock::time_point message_received_at{};
+
+// 累计收到的合法 MCU 帧数量，供上位机判断上下位机通信是否持续。
+std::atomic<std::uint64_t> received_frame_count{0};
+
+// 首帧只打印一次，用于和电控固件逐字节比对线帧格式。
+std::atomic<bool> dumped_rx_frame{false};
+std::atomic<bool> dumped_tx_frame{false};
 
 int web_port = kDefaultWebPort;
 
@@ -118,11 +126,30 @@ bool hasFiniteControlInput(const MessData_AutoAim& message) noexcept {
            std::isfinite(message.roll) && std::isfinite(message.bias);
 }
 
+void printFrameHex(const char* tag, const char* data) {
+    // 按线帧顺序打印全部 64 字节，便于与电控结构体进行逐字节比对。
+    std::cout << tag << ' ';
+    for (std::size_t i = 0; i < kCommunicationFrameSize; ++i) {
+        char byte[4];
+        std::snprintf(byte, sizeof(byte), "%02X", static_cast<unsigned char>(data[i]));
+        std::cout << byte;
+    }
+    std::cout << '\n';
+}
+
 void publishFrame(const Translator& incoming) {
-    std::lock_guard<std::mutex> lock(message_mutex);
-    temp = incoming;
-    message_received_at = std::chrono::steady_clock::now();
-    message_available = true;
+    {
+        std::lock_guard<std::mutex> lock(message_mutex);
+        temp = incoming;
+        message_received_at = std::chrono::steady_clock::now();
+        message_available = true;
+    }
+    received_frame_count.fetch_add(1, std::memory_order_relaxed);
+
+    // 原始线帧只打印一次，便于和电控固件逐字节比对；其余遥测统一在发信处上报。
+    if (!dumped_rx_frame.exchange(true, std::memory_order_relaxed)) {
+        printFrameHex("[rx] 电控首帧 64 字节:", incoming.data);
+    }
 }
 
 bool copyLatestFrame(Translator& destination,
@@ -140,10 +167,84 @@ bool frameIsFresh(const std::chrono::steady_clock::time_point& received_at) {
     return std::chrono::steady_clock::now() - received_at <= kMessageMaxAge;
 }
 
+double latestFrameAgeMs() {
+    std::lock_guard<std::mutex> lock(message_mutex);
+    if (!message_available) {
+        return -1.0;
+    }
+    return std::chrono::duration<double, std::milli>(
+               std::chrono::steady_clock::now() - message_received_at)
+        .count();
+}
+
+// 上下位机通信遥测的唯一入口。每写回一帧就调用一次：把链路健康（收方向）
+// 和当前发信帧从 yaw 到 crc 的全部参数一起送到 Web Debug，并在终端按 1 Hz
+// 打印一行摘要，用来确认上下位机通信是否正常。
+void publishCommsTelemetry(const Translator& frame) {
+    const std::uint64_t rx_frames =
+        received_frame_count.load(std::memory_order_relaxed);
+    const double rx_age_ms = latestFrameAgeMs();
+    const double rx_ok_max_age_ms = static_cast<double>(kMessageMaxAge.count());
+    const bool rx_ok = rx_age_ms >= 0.0 && rx_age_ms <= rx_ok_max_age_ms;
+
+    // 链路健康：收帧数与最新电控帧的年龄。
+    WEB_LOG("link.rx_frames", static_cast<double>(rx_frames));
+    WEB_LOG("link.rx_age_ms", rx_age_ms);
+    WEB_LOG("link.rx_ok", rx_ok ? 1.0 : 0.0);
+
+    // 当前写回电控的整帧参数（从 yaw 到 crc）。
+    const auto& m = frame.message;
+    WEB_LOG("frame.yaw", m.yaw);
+    WEB_LOG("frame.pitch", m.pitch);
+    WEB_LOG("frame.roll", m.roll);
+    WEB_LOG("frame.status", static_cast<double>(m.status));
+    WEB_LOG("frame.is_far", static_cast<double>(m.is_far));
+    WEB_LOG("frame.armor_flag", static_cast<double>(m.armor_flag));
+    WEB_LOG("frame.latency", m.latency);
+    WEB_LOG("frame.bias", m.bias);
+    WEB_LOG("frame.distance", m.distance);
+    WEB_LOG("frame.pitch_offset", m.pitch_offset);
+    WEB_LOG("frame.coo_x", m.coo_x);
+    WEB_LOG("frame.coo_y", m.coo_y);
+    WEB_LOG("frame.wheel_w", m.wheel_w);
+    WEB_LOG("frame.fire_allowance", static_cast<double>(m.fire_allowance));
+    WEB_LOG("frame.target_yaw", m.target_yaw);
+    WEB_LOG("frame.target_pitch", m.target_pitch);
+    WEB_LOG("frame.yaw_vel", m.yaw_vel);
+    WEB_LOG("frame.pitch_vel", m.pitch_vel);
+    WEB_LOG("frame.crc", static_cast<double>(m.crc));
+
+    if (!dumped_tx_frame.exchange(true, std::memory_order_relaxed)) {
+        printFrameHex("[tx] 视觉首帧 64 字节:", frame.data);
+    }
+
+    // 终端 1 Hz 摘要。
+    static auto last_report = std::chrono::steady_clock::time_point{};
+    const auto now = std::chrono::steady_clock::now();
+    if (last_report.time_since_epoch().count() == 0 ||
+        now - last_report >= std::chrono::seconds(1)) {
+        last_report = now;
+        std::cout << "[comm] rx=" << rx_frames << " age=" << rx_age_ms
+                  << "ms ok=" << (rx_ok ? 1 : 0) << " | yaw=" << m.yaw
+                  << " pitch=" << m.pitch
+                  << " status=" << static_cast<unsigned int>(m.status)
+                  << " -> target_yaw=" << m.target_yaw
+                  << " target_pitch=" << m.target_pitch
+                  << " armor=" << static_cast<unsigned int>(m.armor_flag)
+                  << " crc=" << m.crc
+                  << " fire=" << static_cast<unsigned int>(m.fire_allowance)
+                  << std::endl;
+    }
+}
+
 bool writeFrame(SerialPort& serialPort, Translator& frame) {
     // 统一设置协议边界，并保证一次写出完整的 64 字节帧。
     frame.message.head = kFrameHead;
     frame.message.tail = kFrameTail;
+
+    // 唯一入口：上报链路健康与当前发信帧的全部参数。
+    publishCommsTelemetry(frame);
+
     const int written =
         serialPort.Write(frame.data, static_cast<int>(kCommunicationFrameSize));
     if (written != static_cast<int>(kCommunicationFrameSize)) {
