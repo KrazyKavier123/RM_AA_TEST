@@ -23,7 +23,6 @@ bool View::show(const cv::Mat& frame, const std::vector<ArmorDetection>& dets,
 
     cv::Mat image = frame.clone();
 
-    cv::rotate(image, image, cv::ROTATE_180);
     for (const auto& det : dets) {
         const cv::Scalar color = det.target_id > 0 ? cv::Scalar(0, 255, 0)
                                                   : cv::Scalar(0, 180, 255);

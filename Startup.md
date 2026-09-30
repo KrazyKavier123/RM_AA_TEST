@@ -104,3 +104,34 @@ PnP 未通过重投影误差筛选时只显示检测框。
 这里的框是装甲板检测框，不是相机标定棋盘格。
 采集/视频分辨率须与标定一致，显示缩放不改变算法输入。
 按 Q / Esc 或关闭窗口退出。取流失败不再补黑帧，不生成虚拟输入。
+
+# 视觉参数
+以StudentTask为最终值，其它值参考.hpp。
+
+A. 确实以 StudentTasks.cpp 顶部的常量为准（会覆盖头文件默认值）因为它们都通过构造函数显式注入：
+
+| 模块 | 参数 | 来源 |
+|---|---|---|
+| 取流 | mode/backend/device/serial/path/width/height/fps/exposure/gain/loop | `source_config()` [StudentTasks.cpp:81](/home/krazyk/Desktop/RMVtraining/student/src/StudentTasks.cpp:81) |
+| 预处理 | threshold / open_radius | `kGrayThreshold/kOpenRadius` [StudentTasks.cpp:37](/home/krazyk/Desktop/RMVtraining/student/src/StudentTasks.cpp:37) |
+| 灯条检测 | 全部 9 个 `DetectorConfig` 字段 | [StudentTasks.cpp:39](/home/krazyk/Desktop/RMVtraining/student/src/StudentTasks.cpp:39) |
+| 数字分类 | 模型/标签/阈值 | `kModelPath/kLabelPath/kClassThreshold` [StudentTasks.cpp:47](/home/krazyk/Desktop/RMVtraining/student/src/StudentTasks.cpp:47) |
+| PnP | 小/大板宽、板高、重投影上限、法线符号 | `kPlateSmallW…` |
+| 弹道 | 弹速、重力、枪口偏移 | `kBulletSpeed/kGravity/kMuzzle` |
+| MPC | steps/iters/dt/angle_w/rate_w/effort_w/max_acc/tol | `mpc_config()` [StudentTasks.cpp:101](/home/krazyk/Desktop/RMVtraining/student/src/StudentTasks.cpp:101) |
+| 跟踪 | **只有** radius / timeout / alt_geometry | `tracker_config()` [StudentTasks.cpp:113](/home/krazyk/Desktop/RMVtraining/student/src/StudentTasks.cpp:113) |
+
+
+这部分改完要重新 cmake --build（是编译期常量）。
+
+B. 不在 StudentTasks.cpp、仍取头文件默认值的（容易踩坑）
+
+- 取流超时 SourceConfig::grab_timeout_ms（默认 1000 ms）——source_config() 里没赋值。
+- 跟踪 EKF 的其余全部字段：plates=4、min/max_radius、acc_var、yaw_acc_var、pos_var、yaw_var、assoc_dist、assoc_yaw、nis_gate、switch_margin、max_dz——见 [tracking/include/Tracker.hpp (line 22)](/home/krazyk/Desktop/RMVtraining/tracking/include/Tracker.hpp:22)，tracker_config() 只覆盖 3 个。
+- 显示参数 ViewConfig（enabled/scale/axis/thickness/font）——[main.cpp (line 243)](/home/krazyk/Desktop/RMVtraining/main.cpp:243) 里用默认构造的 rmv::View view;，值在 [vision/include/View.hpp](/home/krazyk/Desktop/RMVtraining/vision/include/View.hpp)。
+- 相机内参/畸变/相机→云台外参/标定分辨率/标定误差——config/camera.yaml（运行时读取，不用重编译）。
+- 串口设备、波特率、标定文件路径、Web 端口——命令行参数（[main.cpp (line 81)](/home/krazyk/Desktop/RMVtraining/main.cpp:81) parseOptions）。
+- main.cpp 内部的行为常量：kMessageMaxAge=500ms、kInitialReadAttempts=5、kIdleDelay=10ms、kDefaultWebPort=8080。
+结论
+- 想调算法/识别阈值（预处理、灯条、分类阈值、PnP 尺寸、弹道、MPC）→ 都在 StudentTasks.cpp，且以它为准（覆盖头文件默认值），改后重编译。
+- 但"视觉所有参数都以 StudentTasks 为最终值"这句不成立：跟踪的噪声/门限、取流超时、显示参数、相机标定、串口这些都不在它里。跟踪噪声和取流超时若想统一，需要我在 StudentTasks.cpp 里再补几个常量暴露出来。

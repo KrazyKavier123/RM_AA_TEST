@@ -29,19 +29,19 @@ const std::string kSerial = "";                 // 非空时按海康序列号�
 const std::string kVideoPath = "../videos/video";  // video 模式：文件或目录（相对运行目录）
 const int kWidth = 1440, kHeight = 1080;        // 需与 camera.yaml 的标定分辨率一致
 const double kFps = 60.0;
-const double kExposureUs = 20000.0;             // 曝光越大越亮，运动模糊也越重
-const double kGainDb = 16.0;
+const double kExposureUs = 10000.0;             // 曝光越大越亮，运动模糊也越重
+const double kGainDb = 8.0;
 const bool kLoopVideo = false;
 
 // 预处理与灯条检测。
-const int kGrayThreshold = 100;
-const int kOpenRadius = 0;
-const float kMinLightLen = 8.0f;
-const float kMaxLightRatio = 0.45f;
-const float kMaxTiltDeg = 35.0f;
-const float kMinPairRatio = 1.5f, kMaxPairRatio = 5.0f;
-const float kLargePairRatio = 3.3f;
-const float kMinLenRatio = 0.65f, kMaxDyRatio = 0.6f, kMinColorDiff = 8.0f;
+const int kGrayThreshold = 200; //灰度二值化阈值
+const int kOpenRadius = 1; //开运算半径
+const float kMinLightLen = 8.0f; //灯条最小长度（像素）
+const float kMaxLightRatio = 0.45f; //长宽比上限
+const float kMaxTiltDeg = 35.0f; //最大倾角
+const float kMinPairRatio = 1.5f, kMaxPairRatio = 5.0f; //灯条中心距/灯条长 下限/上限
+const float kLargePairRatio = 3.3f; //大小装甲板的分类边界
+const float kMinLenRatio = 0.65f, kMaxDyRatio = 0.6f, kMinColorDiff = 8.0f; //通道均值与蓝通道均值之差的绝对值下限
 
 // 数字分类。
 const std::string kModelPath = "models/mlp.onnx";
@@ -142,7 +142,11 @@ Pipeline& pipeline() {
 }  // namespace
 
 bool get_pic(cv::Mat& pic) {
-    return pipeline().source.read(pic);
+    if (!pipeline().source.read(pic) || pic.empty()) {
+        return false;
+    }
+    cv::rotate(pic, pic, cv::ROTATE_180);
+    return true;
 }
 
 std::vector<ArmorDetection> armor_detect(const cv::Mat& pic, TeamColor enemy_color) {
