@@ -78,6 +78,7 @@ struct PredictionResult {
     float center_velocity_y_m_s{0.0F};
     float body_yaw{0.0F};
     float body_yaw_velocity{0.0F};
+    float body_yaw_acceleration{0.0F}; // 车体角加速度，rad/s²，仅用于内部结果与调试。
     float radius_1_m{0.0F};
     float radius_2_m{0.0F};
     // 最终云台指令：距离单位为米，角度单位为弧度，角速度单位为弧度每秒。

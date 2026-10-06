@@ -253,8 +253,9 @@ PredictionResult ekf_predict(const std::vector<ArmorPose>& poses, const GimbalSt
         r.center_velocity_y_m_s = static_cast<float>(x[3]);
         r.body_yaw = static_cast<float>(x[6]);
         r.body_yaw_velocity = static_cast<float>(x[7]);
-        r.radius_1_m = static_cast<float>(x[8]);
-        r.radius_2_m = static_cast<float>(x[9]);
+        r.body_yaw_acceleration = static_cast<float>(x[8]);
+        r.radius_1_m = static_cast<float>(x[9]);
+        r.radius_2_m = static_cast<float>(x[10]);
         r.distance_m = static_cast<float>(p.tracker.plate_at(index, t_aim).pos.norm());
         r.target_yaw = static_cast<float>(yaw_plan.states[0][0]);
         r.target_pitch = static_cast<float>(pitch_plan.states[0][0]);

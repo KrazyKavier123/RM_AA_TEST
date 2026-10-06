@@ -263,7 +263,8 @@ void logPrediction(const PredictionResult& result) {
         WEB_LOG("mpc_ok", 0.0);
         for (const char* key : {"target_id", "target_distance", "ekf_x_m", "ekf_y_m",
                                 "ekf_vx_m_s", "ekf_vy_m_s", "ekf_yaw_rad",
-                                "ekf_yaw_rate_rad_s", "ekf_radius_1_m", "ekf_radius_2_m"})
+                                "ekf_yaw_rate_rad_s", "ekf_yaw_acc_rad_s2",
+                                "ekf_radius_1_m", "ekf_radius_2_m"})
             WEB_LOG(key, 0.0);
         return;
     }
@@ -278,6 +279,7 @@ void logPrediction(const PredictionResult& result) {
     WEB_LOG("ekf_vy_m_s", result.center_velocity_y_m_s);
     WEB_LOG("ekf_yaw_rad", result.body_yaw);
     WEB_LOG("ekf_yaw_rate_rad_s", result.body_yaw_velocity);
+    WEB_LOG("ekf_yaw_acc_rad_s2", result.body_yaw_acceleration);
     WEB_LOG("ekf_radius_1_m", result.radius_1_m);
     WEB_LOG("ekf_radius_2_m", result.radius_2_m);
 }

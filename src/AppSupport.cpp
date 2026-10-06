@@ -22,6 +22,7 @@ bool finitePrediction(const PredictionResult& prediction) {
            std::isfinite(prediction.center_velocity_y_m_s) &&
            std::isfinite(prediction.body_yaw) &&
            std::isfinite(prediction.body_yaw_velocity) &&
+           std::isfinite(prediction.body_yaw_acceleration) &&
            std::isfinite(prediction.radius_1_m) &&
            std::isfinite(prediction.radius_2_m) && prediction.radius_1_m >= 0.0F &&
            prediction.radius_2_m >= 0.0F &&

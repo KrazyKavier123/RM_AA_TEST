@@ -1,5 +1,6 @@
 #include "AppSupport.hpp"
 #include "Mpc.hpp"
+#include "Tracker.hpp"
 
 #include <cassert>
 #include <cmath>
@@ -68,12 +69,23 @@ int main() {
     stable.target_yaw = 0.4F;
     stable.target_pitch = -0.2F;
     stable.fire_allowed = true;
+    stable.body_yaw_acceleration = 0.8F;
     assert(applyPrediction(message, stable));
     assert(message.message.armor_flag == 3U);
     assert(std::abs(message.message.coo_x - 1250.0F) < 1e-4F);
     assert(std::abs(message.message.coo_y + 500.0F) < 1e-4F);
     assert(message.message.fire_allowance == 1U);
     assert(message.message.crc == 1U);
+
+    // 调试新增状态同样拒绝 NaN/Inf，且不改变64字节协议。
+    for (float invalid : {std::numeric_limits<float>::quiet_NaN(),
+                          std::numeric_limits<float>::infinity()}) {
+        stable.body_yaw_acceleration = invalid;
+        const bool accepted = applyPrediction(message, stable);
+        assert(!accepted);
+        assert(message.message.fire_allowance == 0U && message.message.crc == 0U);
+    }
+    stable.body_yaw_acceleration = 0.8F;
 
     stable.state = TrackingState::Unstable;
     assert(applyPrediction(message, stable));
@@ -91,6 +103,51 @@ int main() {
     assert(!isAutoAimStatus(1U));
     assert(enemyColorFromStatus(0U) == TeamColor::Blue);
     assert(enemyColorFromStatus(5U) == TeamColor::Red);
+
+    // 12 维 EKF：用跨越 ±pi 的加速旋转观测验证估计、奇偶几何及丢帧外推。
+    for (bool alt_geometry : {false, true}) {
+        rmv::TrackerConfig cfg;
+        cfg.alt_geometry = alt_geometry;
+        rmv::Tracker tracker(cfg);
+        const Eigen::Vector3d camera_origin = Eigen::Vector3d::Zero();
+        const auto observation = [&](int plate, double t) {
+            const double yaw = rmv::wrap(2.9 + 0.3 * t + 0.5 * 0.8 * t * t +
+                                         plate * rmv::kPi / 2.0);
+            const bool odd = alt_geometry && plate % 2 != 0;
+            const double radius = odd ? 0.32 : 0.25;
+            return rmv::TrackObs{{3.0 - radius * std::cos(yaw),
+                                  -radius * std::sin(yaw), 0.5 + (odd ? 0.08 : 0.0)},
+                                 yaw, 3};
+        };
+        const bool initialized = tracker.update({observation(0, 0.0)}, 0.0, camera_origin);
+        assert(initialized);
+        const auto initial = tracker.state_at(0.0);
+        assert(initial[8] == 0.0 && initial[9] == cfg.radius &&
+               initial[10] == cfg.radius && initial[11] == 0.0);
+        for (int frame = 1; frame <= 150; ++frame) {
+            const double t = frame * 0.02;
+            std::vector<rmv::TrackObs> observations;
+            for (int plate = 0; plate < 4; ++plate)
+                observations.push_back(observation(plate, t));
+            const bool accepted = tracker.update(observations, t, camera_origin);
+            assert(accepted);
+        }
+        const auto state = tracker.state_at(3.0);
+        assert(state.allFinite());
+        assert(std::abs(state[8] - 0.8) < 0.1);
+        assert(std::abs(state[7] - 2.7) < 0.1);
+        assert(std::abs(state[9] - 0.25) < 0.02);
+        assert(std::abs(state[10] - (alt_geometry ? 0.32 : 0.25)) < 0.02);
+        assert(std::abs(state[11] - (alt_geometry ? 0.08 : 0.0)) < 0.02);
+        tracker.update({}, 3.1, camera_origin);
+        assert(tracker.valid(3.1));
+        for (int plate = 0; plate < 4; ++plate) {
+            const auto predicted = tracker.plate_at(plate, 3.2);
+            const auto expected = observation(plate, 3.2);
+            assert((predicted.pos - expected.pos).norm() < 0.03);
+            assert(std::abs(rmv::wrap(predicted.yaw - expected.yaw)) < 0.03);
+        }
+    }
 
     // MPC：投影梯度必须守住角加速度上限，并把状态推向参考角。
     rmv::MpcConfig mpc_cfg;

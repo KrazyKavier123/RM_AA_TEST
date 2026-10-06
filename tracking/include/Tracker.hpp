@@ -18,14 +18,16 @@ struct TrackObs {
     int id{0};      // 装甲板编号，0 表示未知
 };
 
-// 旋转车体 EKF 参数。移植自 src/rm_aa_control/src/tracker.cpp。
+// 旋转车体 EKF 参数。
+// 车体状态初始化在Tracker.cpp中，滤波器状态向量为 [cx, vx, cy, vy, z, vz, yaw, yaw_rate, yaw_accelerate, r_even, r_odd, dz_odd]。
 struct TrackerConfig {
     int plates{4};                 // 装甲板数量
     double radius{0.25};           // 初始旋转半径 (m)
     double min_radius{0.05};
     double max_radius{0.8};
     double acc_var{4.0};           // 平移加速度方差
-    double yaw_acc_var{16.0};      // 角加速度方差
+    double yaw_acc_var{16.0};      // 初始角加速度方差 (rad²/s⁴)
+    double yaw_jerk_var{16.0};     // 每步恒定随机角加加速度的方差 (rad²/s⁶)，需实测调参
     double pos_var{0.0025};        // 位置观测方差
     double yaw_var{0.04};          // 角度观测方差
     double assoc_dist{0.5};        // 位置关联门限 (m)
@@ -39,9 +41,9 @@ struct TrackerConfig {
 
 class Tracker {
 public:
-    // 状态向量：[cx, vx, cy, vy, z, vz, yaw, yaw_rate, r_even, r_odd, dz_odd]
-    using State = Eigen::Matrix<double, 11, 1>;
-    using Cov = Eigen::Matrix<double, 11, 11>;
+    // 状态向量：[cx, vx, cy, vy, z, vz, yaw, yaw_rate, yaw_accelerate, r_even, r_odd, dz_odd]
+    using State = Eigen::Matrix<double, 12, 1>;
+    using Cov = Eigen::Matrix<double, 12, 12>;
 
     explicit Tracker(TrackerConfig config = {});
 
@@ -60,7 +62,7 @@ public:
 
 private:
     TrackObs measure(const State& x, int index) const;
-    Eigen::Matrix<double, 4, 11> jacobian(int index) const;
+    Eigen::Matrix<double, 4, 12> jacobian(int index) const;
     Cov cov_at(double stamp) const;
     bool correct(const TrackObs& obs, int index);
 
