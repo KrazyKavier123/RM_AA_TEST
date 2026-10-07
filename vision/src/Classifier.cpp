@@ -54,8 +54,12 @@ void Classifier::classify(const cv::Mat& bgr, ArmorDetection& det) {
     det.label = label;
     det.confidence = static_cast<float>(confidence);
     det.target_id = 0;
-    if (confidence >= threshold_ && label.size() == 1 && label[0] >= '1' && label[0] <= '5')
-        det.target_id = label[0] - '0';  // 只接受 1~5 号装甲板。这里是字符转整数，例如 '3' - '0' 得到整数 3。不满足条件时，target_id 保持 0，表示该分类结果不被接受。
+    if (confidence >= threshold_) {
+    if (label.size() == 1 && label[0] >= '1' && label[0] <= '5') {
+        det.target_id = label[0] - '0';
+    } else if (label == "guard") {
+        det.target_id = 7;  // 示例：需要与电控约定 guard 的编号
+    }
 }
 
 }  // namespace rmv

@@ -59,6 +59,9 @@ public:
 
     int updates() const { return updates_; }
     int plate_id(int index) const { return ids_.at(index); }
+    int plates() const { return cfg_.plates; }
+    // 某板位在 stamp 时刻的位置不确定度 tr(J P Jᵀ)（3×3 位置块），用于选板评分。
+    double plate_uncertainty(int index, double stamp) const;
 
 private:
     TrackObs measure(const State& x, int index) const;

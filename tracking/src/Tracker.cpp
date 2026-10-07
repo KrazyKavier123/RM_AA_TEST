@@ -74,6 +74,21 @@ Tracker::Cov Tracker::cov_at(double stamp) const {
     return f * P_ * f.transpose() + q;
 }
 
+double Tracker::plate_uncertainty(int index, double stamp) const {
+    const State x = state_at(stamp);
+    const bool odd = cfg_.alt_geometry && index % 2 != 0;
+    const int r = odd ? 10 : 9;
+    const double a = x[6] + 2.0 * kPi * index / cfg_.plates;
+    Eigen::Matrix<double, 3, 12> h = Eigen::Matrix<double, 3, 12>::Zero();
+    h(0, 0) = h(1, 2) = h(2, 4) = 1.0;
+    h(0, 6) = x[r] * std::sin(a);
+    h(1, 6) = -x[r] * std::cos(a);
+    h(0, r) = -std::cos(a);
+    h(1, r) = -std::sin(a);
+    if (odd) h(2, 11) = 1.0;
+    return (h * cov_at(stamp) * h.transpose()).trace();
+}
+
 bool Tracker::correct(const TrackObs& obs, int index) {
     const TrackObs expected = measure(x_, index);
     Eigen::Vector4d residual;

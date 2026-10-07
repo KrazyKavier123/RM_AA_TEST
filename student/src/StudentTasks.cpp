@@ -29,8 +29,8 @@ const std::string kSerial = "";                 // 非空时按海康序列号�
 const std::string kVideoPath = "../videos/video";  // video 模式：文件或目录（相对运行目录）
 const int kWidth = 1440, kHeight = 1080;        // 需与 camera.yaml 的标定分辨率一致
 const double kFps = 60.0;
-const double kExposureUs = 10000.0;             // 曝光越大越亮，运动模糊也越重
-const double kGainDb = 8.0;
+const double kExposureUs = 7000.0;             // 曝光越大越亮，运动模糊也越重
+const double kGainDb = 16.0;
 const bool kLoopVideo = false;
 
 // 预处理与灯条检测。
@@ -64,6 +64,15 @@ const int kStableUpdates = 5;      // 连续更新次数达到后判为稳定
 const double kBulletSpeed = 22.0;                  // 弹速 (m/s)
 const double kGravity = 9.7833;                    // 重力加速度 (m/s^2)
 const Eigen::Vector3d kMuzzle{0.0741, 0.0, 0.0};   // 枪口相对云台原点偏移 (m)
+
+// 选板：关闭时只用离相机最近的板，开启时逐候选解飞行时间、按预测后的命中位置评分。
+const bool kSmartSelect = true;
+const double kTsys = 0.02;      // 系统固定延迟 T_sys：图像年龄+计算+通信+云台+发射 (s)
+const double kFaceMin = 0.2;    // 朝向门限：板外法线与相机方向的夹角余弦低于此值视为背向/遮挡
+const double kFaceW = 1.0;      // 评分权重：朝向
+const double kYawW = 1.0;       // 评分权重：云台转角
+const double kCovW = 1.0;       // 评分权重：位置不确定度
+const double kSwitchW = 0.5;    // 换板惩罚
 
 // MPC：把瞄准角规划成满足角加速度上限的指令，预测 kMpcSteps * kMpcDt = 0.5 s。
 const int kMpcSteps = 25;                          // 预测步数
@@ -132,6 +141,7 @@ struct Pipeline {
     // 云台角速度靠相邻两帧角度差分估计（协议不回传角速度），作为 MPC 初值。
     double stamp{0.0}, yaw{0.0}, pitch{0.0};
     bool have_gimbal{false};
+    int prev_plate{-1};  // 评分选板的上次选择，用于换板惩罚
 };
 
 Pipeline& pipeline() {
@@ -198,36 +208,63 @@ PredictionResult ekf_predict(const std::vector<ArmorPose>& poses, const GimbalSt
     p.tracker.update(obs, timestamp_seconds, p.camera_origin);
     if (!p.tracker.valid(timestamp_seconds)) return {};
 
-    const int index = p.tracker.select_nearest(timestamp_seconds, p.camera_origin);
-    if (index < 0) return {};
-    const int id = p.tracker.plate_id(index);
-    if (id <= 0) return {};
+    // 开火时刻 = 当前帧 + 系统固定延迟 T_sys + 电控下发偏置。
+    const double t_fire = timestamp_seconds + kTsys + gimbal.prediction_bias_s;
 
-    // 预测时刻 = 当前帧 + 电控下发的预测时间偏置。
-    const double t_aim = timestamp_seconds + gimbal.prediction_bias_s;
+    // 命中时刻的弹道解：用上一轮飞行时间把目标外推到"开火时刻 + 飞行时间"，迭代到自洽。
+    // 目标在子弹飞行期间还在动，不补这一段就会系统性打偏（弹速 22 m/s 时 3 m 处约 0.14 s）。
+    const auto solve = [&](int plate, double stamp) {
+        rmv::BallisticSolution s = rmv::ballistic_angles(
+            p.tracker.plate_at(plate, stamp).pos, kMuzzle, kBulletSpeed, kGravity);
+        for (int i = 0; i < 3; ++i) {
+            const rmv::BallisticSolution next = rmv::ballistic_angles(
+                p.tracker.plate_at(plate, stamp + s.flight_time).pos, kMuzzle, kBulletSpeed,
+                kGravity);
+            const bool done = std::abs(next.flight_time - s.flight_time) < 1e-6;
+            s = next;
+            if (done) break;
+        }
+        return s;
+    };
+
+    int index = -1;
     try {
-        // 取瞄准角：先用上一轮的飞行时间把目标外推到命中时刻再重解，最多 3 轮。
-        // 目标在子弹飞行期间还在动，不补这一段就会系统性打偏（弹速 22 m/s 时 3 m 处约 0.14 s）。
-        const auto aim = [&](double stamp) {
-            rmv::BallisticSolution s = rmv::ballistic_angles(
-                p.tracker.plate_at(index, stamp).pos, kMuzzle, kBulletSpeed, kGravity);
-            for (int i = 0; i < 3; ++i) {
-                const rmv::BallisticSolution next = rmv::ballistic_angles(
-                    p.tracker.plate_at(index, stamp + s.flight_time).pos, kMuzzle, kBulletSpeed,
-                    kGravity);
-                const bool done = std::abs(next.flight_time - s.flight_time) < 1e-6;
-                s = next;
-                if (done) break;
-            }
-            return s.angles;
-        };
+        // 选板：关闭时取离相机最近的板，开启时用预测后的命中位置评分。
+        if (!kSmartSelect) {
+            index = p.tracker.select_nearest(timestamp_seconds, p.camera_origin);
+        } else {
+            double best = 0.0;
+            for (int i = 0; i < p.tracker.plates(); ++i) {
+                if (p.tracker.plate_id(i) <= 0) continue;  // 只考虑识别出编号的板
+                const rmv::BallisticSolution s = solve(i, t_fire);
+                const rmv::TrackObs plate = p.tracker.plate_at(i, t_fire + s.flight_time);
 
-        // 参考轨迹：未来 kMpcSteps 步的瞄准角与差分角速度，yaw 连续展开避免 ±π 跳变。
+                // 朝向/遮挡：TrackObs::yaw 是内法线（指向车体中心），朝向相机的是 -n。
+                const Eigen::Vector2d n(std::cos(plate.yaw), std::sin(plate.yaw));
+                const Eigen::Vector2d to_cam = p.camera_origin.head<2>() - plate.pos.head<2>();
+                const double face = -n.dot(to_cam) / to_cam.norm();
+                if (face < kFaceMin) continue;
+
+                const double yaw_err = rmv::wrap(s.angles[0] - gimbal.yaw);
+                double cost = kFaceW * (1.0 - face) + kYawW * yaw_err * yaw_err +
+                              kCovW * p.tracker.plate_uncertainty(i, t_fire + s.flight_time);
+                if (i != p.prev_plate) cost += kSwitchW;  // 换板惩罚
+                if (index < 0 || cost < best) { best = cost; index = i; }
+            }
+            if (index >= 0) p.prev_plate = index;
+        }
+        if (index < 0) return {};
+        const int id = p.tracker.plate_id(index);
+        if (id <= 0) return {};
+
+        // 输出 = 命中时刻的弹道瞄准角；同时把它展开成未来参考轨迹喂给 MPC。
+        const rmv::BallisticSolution aim = solve(index, t_fire);
+        const Eigen::Vector2d target = aim.angles;
         std::vector<Eigen::Vector2d> yaw_ref, pitch_ref;
-        Eigen::Vector2d prev = aim(t_aim);
+        Eigen::Vector2d prev = target;
         prev[0] = gimbal.yaw + rmv::wrap(prev[0] - gimbal.yaw);
         for (int k = 0; k < kMpcSteps; ++k) {
-            Eigen::Vector2d cur = aim(t_aim + (k + 1) * kMpcDt);
+            Eigen::Vector2d cur = solve(index, t_fire + (k + 1) * kMpcDt).angles;
             cur[0] = prev[0] + rmv::wrap(cur[0] - prev[0]);
             yaw_ref.emplace_back(cur[0], (cur[0] - prev[0]) / kMpcDt);
             pitch_ref.emplace_back(cur[1], (cur[1] - prev[1]) / kMpcDt);
@@ -256,9 +293,9 @@ PredictionResult ekf_predict(const std::vector<ArmorPose>& poses, const GimbalSt
         r.body_yaw_acceleration = static_cast<float>(x[8]);
         r.radius_1_m = static_cast<float>(x[9]);
         r.radius_2_m = static_cast<float>(x[10]);
-        r.distance_m = static_cast<float>(p.tracker.plate_at(index, t_aim).pos.norm());
-        r.target_yaw = static_cast<float>(yaw_plan.states[0][0]);
-        r.target_pitch = static_cast<float>(pitch_plan.states[0][0]);
+        r.distance_m = static_cast<float>(p.tracker.plate_at(index, t_fire + aim.flight_time).pos.norm());
+        r.target_yaw = static_cast<float>(target[0]);
+        r.target_pitch = static_cast<float>(target[1]);
         r.target_yaw_velocity = static_cast<float>(yaw_plan.states[0][1]);
         r.target_pitch_velocity = static_cast<float>(pitch_plan.states[0][1]);
         return r;
