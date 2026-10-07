@@ -16,6 +16,7 @@
 #include <exception>
 #include <iostream>
 #include <mutex>
+#include <optional>
 #include <pthread.h>
 #include <string>
 #include <thread>
@@ -58,11 +59,13 @@ std::atomic<bool> dumped_rx_frame{false};
 std::atomic<bool> dumped_tx_frame{false};
 
 int web_port = kDefaultWebPort;
+std::optional<TeamColor> forced_enemy_color; // 空值表示每帧跟随电控 status。
 
 struct Options {
     std::string serial_device;
     int baud_rate{115200};
     std::string camera_config;
+    std::optional<TeamColor> enemy_color;
 };
 
 void request_shutdown(int) {
@@ -71,9 +74,10 @@ void request_shutdown(int) {
 
 void printUsage(const char* program) {
     std::cout << "用法: " << program
-              << " <串口设备> <波特率> <相机标定文件> [Web端口]\n"
+              << " <串口设备> <波特率> <相机标定文件> [Web端口] [--color auto|red|blue]\n"
               << "示例: " << program
               << " /dev/ttyACM0 115200 config/camera.yaml 8080\n"
+              << "颜色: auto 默认跟随 status（0检测蓝色，5检测红色）；red/blue 强制指定。\n"
               << "画面预览（无需串口）: " << program
               << " --view config/camera.yaml [red|blue]\n";
 }
@@ -97,7 +101,7 @@ bool parseOptions(int argc, char** argv, Options& options) {
         printUsage(argv[0]);
         return false;
     }
-    if (argc < 4 || argc > 5) {
+    if (argc < 4) {
         printUsage(argv[0]);
         return false;
     }
@@ -108,9 +112,29 @@ bool parseOptions(int argc, char** argv, Options& options) {
         std::cerr << "波特率无效: " << argv[2] << '\n';
         return false;
     }
-    if (argc == 5 && !parsePositiveInt(argv[4], web_port)) {
-        std::cerr << "Web端口无效: " << argv[4] << '\n';
-        return false;
+    bool have_port = false, have_color = false;
+    for (int i = 4; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "--color") {
+            if (have_color || i + 1 >= argc) {
+                std::cerr << "--color 只能指定一次，且需要 auto、red 或 blue\n";
+                return false;
+            }
+            have_color = true;
+            const std::string color = argv[++i];
+            if (color == "auto") options.enemy_color.reset();
+            else if (color == "red") options.enemy_color = TeamColor::Red;
+            else if (color == "blue") options.enemy_color = TeamColor::Blue;
+            else {
+                std::cerr << "识别颜色无效: " << color << "（应为 auto、red 或 blue）\n";
+                return false;
+            }
+        } else if (!have_port && parsePositiveInt(argv[i], web_port) && web_port <= 65535) {
+            have_port = true;
+        } else {
+            std::cerr << "未知参数或无效Web端口: " << arg << '\n';
+            return false;
+        }
     }
     return true;
 }
@@ -355,6 +379,12 @@ int main(int argc, char** argv) {
         return argc == 2 && std::string(argv[1]) == "--help" ? EXIT_SUCCESS : EXIT_FAILURE;
     }
 
+    forced_enemy_color = options.enemy_color;
+    std::cout << "[detect] 灯条颜色: "
+              << (forced_enemy_color ? (*forced_enemy_color == TeamColor::Red ? "强制红色" : "强制蓝色")
+                                     : "跟随电控status（0蓝色 / 5红色）")
+              << '\n';
+
     std::string camera_error;
     if (!loadCameraParameters(options.camera_config, camera, camera_error)) {
         std::cerr << camera_error << '\n';
@@ -543,7 +573,8 @@ void *OperationFunction(void *arg) {
 
         // 1. 装甲板检测。检测结果为空时不提前结束，继续向下传递空观测。
         const std::vector<ArmorDetection> detections =
-            armor_detect(pic, enemyColorFromStatus(translator.message.status));
+            armor_detect(pic, forced_enemy_color.value_or(
+                                  enemyColorFromStatus(translator.message.status)));
         WEB_LOG("armor_count", static_cast<double>(detections.size()));
         if (!detections.empty()) {
             // 记录第一块候选装甲板，便于在网页中快速判断检测器是否工作。

@@ -216,7 +216,7 @@ PredictionResult ekf_predict(const std::vector<ArmorPose>& poses, const GimbalSt
     const auto solve = [&](int plate, double stamp) {
         rmv::BallisticSolution s = rmv::ballistic_angles(
             p.tracker.plate_at(plate, stamp).pos, kMuzzle, kBulletSpeed, kGravity);
-        for (int i = 0; i < 3; ++i) {
+        for (int i = 0; i < 30; ++i) {
             const rmv::BallisticSolution next = rmv::ballistic_angles(
                 p.tracker.plate_at(plate, stamp + s.flight_time).pos, kMuzzle, kBulletSpeed,
                 kGravity);
