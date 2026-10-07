@@ -55,10 +55,11 @@ void Classifier::classify(const cv::Mat& bgr, ArmorDetection& det) {
     det.confidence = static_cast<float>(confidence);
     det.target_id = 0;
     if (confidence >= threshold_) {
-    if (label.size() == 1 && label[0] >= '1' && label[0] <= '5') {
-        det.target_id = label[0] - '0';
-    } else if (label == "guard") {
-        det.target_id = 7;  // 示例：需要与电控约定 guard 的编号
+        if (label.size() == 1 && label[0] >= '1' && label[0] <= '5') {
+            det.target_id = label[0] - '0';
+        } else if (label == "guard") {
+            det.target_id = 7;  // 示例：需要与电控约定 guard 的编号
+        }
     }
 }
 
