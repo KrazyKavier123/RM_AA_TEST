@@ -34,7 +34,7 @@
             letter-spacing: 0;
         }
 
-        button, select { font: inherit; }
+        button, select, input { font: inherit; }
 
         .topbar {
             position: sticky;
@@ -118,7 +118,7 @@
             font-size: 12px;
         }
 
-        .btn, select {
+        .btn, select, input[type="number"] {
             min-height: 34px;
             border: 1px solid var(--line);
             border-radius: 6px;
@@ -132,7 +132,7 @@
         }
 
         .btn:hover, select:hover { border-color: #526068; }
-        .btn:focus-visible, select:focus-visible {
+        .btn:focus-visible, select:focus-visible, input:focus-visible {
             outline: 2px solid var(--accent);
             outline-offset: 2px;
         }
@@ -144,6 +144,9 @@
         }
 
         select { padding: 0 28px 0 10px; }
+        #customWindow { width: 90px; padding: 0 8px; }
+        #customWindow:invalid { border-color: var(--danger); }
+        #customWindowField[hidden] { display: none; }
 
         main { padding: 18px 20px 30px; }
 
@@ -374,12 +377,19 @@
             <label class="field" for="timeWindow">
                 时间窗
                 <select id="timeWindow">
+                    <option value="7.5">7.5 秒</option>
                     <option value="15">15 秒</option>
                     <option value="30" selected>30 秒</option>
                     <option value="60">1 分钟</option>
                     <option value="300">5 分钟</option>
                     <option value="0">全部</option>
+                    <option value="custom">自定义</option>
                 </select>
+            </label>
+            <label class="field" id="customWindowField" for="customWindow" hidden>
+                <input id="customWindow" type="number" min="0.001" step="any" value="7.5"
+                       required aria-label="自定义时间窗口（秒）" title="输入大于等于0.001的秒数，支持小数；无效时保留上次有效窗口">
+                秒
             </label>
             <button id="pauseButton" class="btn" type="button" aria-pressed="false">暂停</button>
             <button id="clearButton" class="btn" type="button">清空</button>
@@ -422,6 +432,9 @@
             const clearButton = document.getElementById("clearButton");
             const exportButton = document.getElementById("exportButton");
             const timeWindow = document.getElementById("timeWindow");
+            const customWindow = document.getElementById("customWindow");
+            const customWindowField = document.getElementById("customWindowField");
+            let customWindowSeconds = 7.5;
 
             // 每个指标名称对应一张图表，并在浏览器内维护自己的历史记录。
             const charts = new Map();
@@ -611,7 +624,8 @@
 
             function visiblePoints(history) {
                 if (history.length === 0) return history;
-                const seconds = Number(timeWindow.value);
+                const seconds = timeWindow.value === "custom"
+                    ? customWindowSeconds : Number(timeWindow.value);
                 if (seconds === 0) return history;
                 // 时间窗口以最新样本为基准，这样回放历史数据时也能正常工作。
                 const cutoff = history[history.length - 1].t - seconds * 1000;
@@ -773,10 +787,23 @@
             });
 
             exportButton.addEventListener("click", exportAll);
-            timeWindow.addEventListener("change", () => {
+            function refreshTimeWindow() {
                 for (const chart of charts.values()) chart.dirty = true;
                 renderAll(true);
+            }
+
+            timeWindow.addEventListener("change", () => {
+                customWindowField.hidden = timeWindow.value !== "custom";
+                refreshTimeWindow();
+                if (!customWindowField.hidden) customWindow.focus();
             });
+            customWindow.addEventListener("input", () => {
+                const seconds = customWindow.valueAsNumber;
+                if (!customWindow.validity.valid || !Number.isFinite(seconds)) return;
+                customWindowSeconds = seconds;
+                if (timeWindow.value === "custom") refreshTimeWindow();
+            });
+            customWindow.addEventListener("change", () => customWindow.reportValidity());
 
             window.addEventListener("resize", () => {
                 for (const chart of charts.values()) chart.dirty = true;

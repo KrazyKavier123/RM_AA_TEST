@@ -74,6 +74,7 @@ cmake -S . -B build-rmvtraining -DCMAKE_BUILD_TYPE=Release \
 ```bash
 cd ~/Desktop/RMVtraining     # 必须是仓库根：models/ 在这里
 ./build-rmvtraining/rmv_training /dev/ttyACM0 115200 config/camera.yaml 8080
+./build-rmvtraining/rmv_training /dev/ttyACM0 115200 config/camera.yaml 8080 --color blue
 ```
 <串口设备> <波特率> <相机标定文件> [Web端口]，Web 端口省略时默认 8080。
 
